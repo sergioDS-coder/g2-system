@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G2 System — Profile</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      background: linear-gradient(135deg, #000 0%, #0a0e1a 100%);
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      padding: 24px 0;
+    }
+
+    .logo {
+      font-size: 1.4rem;
+      font-weight: 900;
+      letter-spacing: 0.3em;
+      color: #00ddff;
+      text-shadow: 0 0 20px rgba(0, 221, 255, 0.6);
+    }
+
+    .card {
+      background: rgba(20, 24, 40, 0.8);
+      border: 1px solid #2a3050;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 16px;
+      backdrop-filter: blur(20px);
+    }
+
+    .player-name {
+      font-size: 1.6rem;
+      font-weight: 800;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .rank-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #00aaff, #00ddff);
+      color: #000;
+      font-weight: 900;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 1.1rem;
+      letter-spacing: 0.2em;
+    }
+
+    .level-info {
+      display: flex;
+      justify-content: space-between;
+      margin: 16px 0 8px;
+      font-size: 0.9rem;
+      color: #8090b0;
+    }
+
+    .progress {
+      height: 8px;
+      background: #0d1220;
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid #2a3050;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #00aaff, #00ddff);
+      transition: width 0.5s;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .stat {
+      background: #0d1220;
+      border: 1px solid #2a3050;
+      border-radius: 8px;
+      padding: 12px 6px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 0.7rem;
+      color: #6080a0;
+      letter-spacing: 0.1em;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 1.4rem;
+      font-weight: 900;
+      color: #00ddff;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #1a2040;
+      font-size: 0.95rem;
+    }
+
+    .info-row:last-child {
+      border: none;
+    }
+
+    .info-row .label {
+      color: #8090b0;
+    }
+
+    .info-row .value {
+      color: #e0e0e0;
+      font-weight: 600;
+    }
+
+    .nav {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .nav a {
+      background: rgba(0, 100, 200, 0.1);
+      border: 1px solid #2a3050;
+      color: #00ddff;
+      padding: 14px;
+      text-align: center;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      transition: all 0.2s;
+    }
+
+    .nav a:hover {
+      background: rgba(0, 221, 255, 0.15);
+    }
+
+    h2 {
+      font-size: 0.85rem;
+      color: #6080a0;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">G2 SYSTEM</div>
+    </div>
+
+    <div class="card" id="mainCard">
+      <div class="player-name" id="playerName">Loading...</div>
+      <div class="rank-badge" id="rankBadge">F</div>
+
+      <div class="level-info">
+        <span>Level <strong id="levelNum">1</strong></span>
+        <span><span id="expCurrent">0</span> / <span id="expNext">500</span> EXP</span>
+      </div>
+      <div class="progress">
+        <div class="progress-bar" id="progressBar" style="width: 0%"></div>
+      </div>
+
+      <div class="stats-grid">
+        <div class="stat">
+          <div class="stat-label">STR</div>
+          <div class="stat-value" id="statStr">1</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">AGI</div>
+          <div class="stat-value" id="statAgi">1</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">VIT</div>
+          <div class="stat-value" id="statVit">1</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">INT</div>
+          <div class="stat-value" id="statInt">1</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">END</div>
+          <div class="stat-value" id="statEnd">1</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Statistics</h2>
+      <div class="info-row"><span class="label">Total EXP</span><span class="value" id="totalExp">0</span></div>
+      <div class="info-row"><span class="label">Quests Completed</span><span class="value" id="questsTotal">0</span>
+      </div>
+      <div class="info-row"><span class="label">Privacy</span><span class="value" id="privacyVal">-</span></div>
+      <div class="info-row"><span class="label">Language</span><span class="value" id="langVal">-</span></div>
+    </div>
+
+    <div class="nav">
+      <a href="/setup.html">⚙ Setup</a>
+      <a href="/ranking.html">🏆 Ranking</a>
+    </div>
+  </div>
+
+  <script>
+    function loadPlayer() {
+      const raw = localStorage.getItem('g2sys_player')
+      if (!raw) {
+        document.getElementById('playerName').textContent = 'No player setup'
+        return
+      }
+      const p = JSON.parse(raw)
+
+      const RANK_EXP = { F: 500, E: 1000, D: 2000, C: 4000, B: 8000, A: 15000, S: 30000, SS: 60000, SSS: 100000 }
+      const expNext = RANK_EXP[p.rank] || 500
+
+      document.getElementById('playerName').textContent = p.name || 'Player'
+      document.getElementById('rankBadge').textContent = p.rank || 'F'
+      document.getElementById('levelNum').textContent = p.level || 1
+      document.getElementById('expCurrent').textContent = p.expCurrent || 0
+      document.getElementById('expNext').textContent = expNext
+      document.getElementById('progressBar').style.width = `${Math.min(100, ((p.expCurrent || 0) / expNext) * 100)}%`
+
+      const a = p.attributes || {}
+      document.getElementById('statStr').textContent = a.str || 1
+      document.getElementById('statAgi').textContent = a.agi || 1
+      document.getElementById('statVit').textContent = a.vit || 1
+      document.getElementById('statInt').textContent = a.int || 1
+      document.getElementById('statEnd').textContent = a.end || 1
+
+      document.getElementById('totalExp').textContent = (p.expTotal || 0).toLocaleString()
+      document.getElementById('questsTotal').textContent = p.questsCompleted || 0
+      document.getElementById('privacyVal').textContent = p.privacy || 'anonymous'
+      document.getElementById('langVal').textContent = (p.language || 'it').toUpperCase()
+    }
+
+    loadPlayer()
+  </script>
+  <div style="text-align:center; margin-top:12px;">
+    <a href="/" style="color:#6080a0; font-size:0.85rem; text-decoration:none;">
+      ← Back to app
+    </a>
+  </div>
+</body>
+
+</html>

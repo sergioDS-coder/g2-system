@@ -1,0 +1,26 @@
+{
+  "package_id": "com.sergiods.system",
+  "name": "G2 System",
+  "edition": "202601",
+  "version": "1.2.0",
+  "min_app_version": "1.0.0",
+  "min_sdk_version": "1.0.0",
+  "entrypoint": "index.html",
+  "supported_languages": [
+    "en",
+    "it",
+    "fr",
+    "de",
+    "es",
+    "ja",
+    "ko",
+    "zh"
+  ],
+  "description": "Solo Leveling-style daily quest gamification. Complete daily fitness and mental quests to level up, gain attributes and climb the global ranking.",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Required to sync with global ranking and generate AI quests"
+    }
+  ]
+}

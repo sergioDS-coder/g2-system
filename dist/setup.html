@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G2 System — Setup</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    body {
+      background: linear-gradient(135deg, #000 0%, #0a0e1a 100%);
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .card {
+      background: rgba(20, 24, 40, 0.9);
+      border: 1px solid #2a3050;
+      border-radius: 20px;
+      padding: 32px 24px 24px;
+      width: 100%;
+      max-width: 420px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 0 60px rgba(0, 200, 255, 0.12);
+    }
+    .logo {
+      text-align: center;
+      font-size: 1.8rem;
+      font-weight: 900;
+      letter-spacing: 0.3em;
+      color: #00ddff;
+      margin-bottom: 4px;
+      text-shadow: 0 0 30px rgba(0, 221, 255, 0.5);
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #4a6080;
+      margin-bottom: 28px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+    .field { margin-bottom: 16px; }
+    label {
+      display: block;
+      font-size: 0.72rem;
+      color: #6080a0;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 600;
+    }
+    input, select {
+      width: 100%;
+      background: #080e1c;
+      border: 1px solid #1e2840;
+      border-radius: 10px;
+      color: #e0e0e0;
+      font-size: 1rem;
+      padding: 13px 14px;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    input::placeholder { color: #3a4a60; }
+    input:focus, select:focus {
+      border-color: #00ddff;
+      box-shadow: 0 0 0 3px rgba(0, 221, 255, 0.12);
+    }
+    .privacy-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .privacy-btn {
+      background: #080e1c;
+      border: 1px solid #1e2840;
+      border-radius: 10px;
+      padding: 11px 6px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: #4a6080;
+      transition: all 0.2s;
+      user-select: none;
+    }
+    .privacy-btn.active {
+      border-color: #00ddff;
+      background: rgba(0, 221, 255, 0.1);
+      color: #00ddff;
+      font-weight: 600;
+    }
+    hr { border: none; border-top: 1px solid #1a2236; margin: 20px 0; }
+    .btn {
+      width: 100%;
+      background: linear-gradient(135deg, #0099ee 0%, #00ddff 100%);
+      color: #000d1a;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 900;
+      padding: 15px;
+      cursor: pointer;
+      margin-top: 16px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:active { transform: scale(0.98); }
+    .status {
+      text-align: center;
+      font-size: 0.88rem;
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      display: none;
+    }
+    .status.ok {
+      display: block;
+      background: rgba(0, 200, 100, 0.1);
+      color: #00dd88;
+      border: 1px solid rgba(0, 200, 100, 0.25);
+    }
+    .status.err {
+      display: block;
+      background: rgba(255, 50, 50, 0.1);
+      color: #ff5566;
+      border: 1px solid rgba(255, 50, 50, 0.25);
+    }
+    .back-link {
+      display: block;
+      text-align: center;
+      margin-top: 20px;
+      color: #3a4a60;
+      font-size: 0.85rem;
+      text-decoration: none;
+      padding: 10px;
+      border-radius: 8px;
+      transition: color 0.2s;
+    }
+    .back-link:hover { color: #6080a0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">G2 SYSTEM</div>
+    <div class="subtitle">⚔ Setup ⚔</div>
+
+    <form id="setupForm">
+      <div class="field">
+        <label>Player Name</label>
+        <input type="text" id="name" placeholder="Enter your player name" maxlength="20" required autocomplete="off" />
+      </div>
+
+      <div class="field">
+        <label>Ranking Privacy</label>
+        <div class="privacy-row">
+          <div class="privacy-btn" data-value="public">Public</div>
+          <div class="privacy-btn active" data-value="anonymous">Anonymous</div>
+          <div class="privacy-btn" data-value="private">Private</div>
+        </div>
+      </div>
+
+      <input type="hidden" id="privacyValue" value="anonymous" />
+
+      <button type="submit" class="btn">⚔ Save Configuration</button>
+    </form>
+
+    <div class="status" id="status"></div>
+    <a href="/" class="back-link">← Back to home</a>
+  </div>
+
+  <script>
+    const KEYS = {
+      player: 'g2sys_player',
+      setupComplete: 'g2sys_setup_complete',
+    }
+
+    document.querySelectorAll('.privacy-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.privacy-btn').forEach(b => b.classList.remove('active'))
+        btn.classList.add('active')
+        document.getElementById('privacyValue').value = btn.dataset.value
+      })
+    })
+
+    function generatePlayerId() {
+      return 'p_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+    }
+
+    function loadExisting() {
+      const raw = localStorage.getItem(KEYS.player)
+      if (raw) {
+        try {
+          const p = JSON.parse(raw)
+          if (p.name) document.getElementById('name').value = p.name
+          if (p.privacy) {
+            document.querySelectorAll('.privacy-btn').forEach(b => {
+              b.classList.toggle('active', b.dataset.value === p.privacy)
+            })
+            document.getElementById('privacyValue').value = p.privacy
+          }
+        } catch {}
+      }
+    }
+
+    document.getElementById('setupForm').addEventListener('submit', (e) => {
+      e.preventDefault()
+      const name = document.getElementById('name').value.trim()
+      const privacy = document.getElementById('privacyValue').value
+
+      if (!name) { showStatus('Player name is required.', 'err'); return }
+
+      let player
+      try { player = JSON.parse(localStorage.getItem(KEYS.player) || 'null') }
+      catch { player = null }
+
+      if (!player) {
+        player = {
+          playerId: generatePlayerId(),
+          level: 1, rank: 'F',
+          expTotal: 0, expCurrent: 0,
+          attributes: { str: 1, agi: 1, vit: 1, int: 1, end: 1 },
+          questsCompleted: 0, lastDailyDate: '',
+          language: 'it',
+        }
+      }
+
+      player.name = name
+      player.privacy = privacy
+
+      localStorage.setItem(KEYS.player, JSON.stringify(player))
+      localStorage.setItem(KEYS.setupComplete, 'true')
+
+      showStatus('✓ Saved! Press the touchpad on your G2 to update.', 'ok')
+    })
+
+    function showStatus(msg, type) {
+      const el = document.getElementById('status')
+      el.textContent = msg
+      el.className = `status ${type}`
+    }
+
+    loadExisting()
+  </script>
+</body>
+</html>

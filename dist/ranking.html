@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G2 System — Global Ranking</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    body {
+      background: linear-gradient(135deg, #000 0%, #0a0e1a 100%);
+      color: #e0e0e0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      padding: 24px 0;
+    }
+
+    .logo {
+      font-size: 1.4rem;
+      font-weight: 900;
+      letter-spacing: 0.3em;
+      color: #00ddff;
+      text-shadow: 0 0 20px rgba(0, 221, 255, 0.6);
+    }
+
+    .subtitle {
+      font-size: 0.85rem;
+      color: #6080a0;
+      margin-top: 4px;
+      letter-spacing: 0.1em;
+    }
+
+    .card {
+      background: rgba(20, 24, 40, 0.8);
+      border: 1px solid #2a3050;
+      border-radius: 16px;
+      padding: 8px;
+      margin-bottom: 16px;
+      backdrop-filter: blur(20px);
+      overflow: hidden;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 50px 1fr 60px 60px 100px;
+      gap: 8px;
+      align-items: center;
+      padding: 14px 12px;
+      border-bottom: 1px solid #1a2040;
+      font-size: 0.92rem;
+    }
+
+    .row:last-child {
+      border: none;
+    }
+
+    .row.header-row {
+      background: rgba(0, 100, 200, 0.05);
+      font-size: 0.72rem;
+      color: #6080a0;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 700;
+      border-radius: 8px 8px 0 0;
+    }
+
+    .row.me {
+      background: rgba(0, 221, 255, 0.08);
+      border-left: 3px solid #00ddff;
+    }
+
+    .pos {
+      text-align: center;
+      font-weight: 800;
+      color: #6080a0;
+    }
+
+    .pos.gold {
+      color: #ffd700;
+      font-size: 1.1rem;
+    }
+
+    .pos.silver {
+      color: #c0c0c0;
+      font-size: 1.05rem;
+    }
+
+    .pos.bronze {
+      color: #cd7f32;
+    }
+
+    .name {
+      font-weight: 600;
+      color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .lvl {
+      color: #80b0e0;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    .rank-cell {
+      text-align: center;
+      font-weight: 800;
+      color: #00ddff;
+      background: rgba(0, 221, 255, 0.08);
+      border-radius: 4px;
+      padding: 2px 4px;
+    }
+
+    .exp {
+      text-align: right;
+      color: #80b0e0;
+      font-weight: 600;
+    }
+
+    .empty {
+      padding: 60px 20px;
+      text-align: center;
+      color: #6080a0;
+    }
+
+    .nav {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    .nav a {
+      background: rgba(0, 100, 200, 0.1);
+      border: 1px solid #2a3050;
+      color: #00ddff;
+      padding: 14px;
+      text-align: center;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .refresh {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 0.85rem;
+      color: #6080a0;
+      cursor: pointer;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">G2 SYSTEM</div>
+      <div class="subtitle">🏆 GLOBAL RANKING 🏆</div>
+    </div>
+
+    <div class="card">
+      <div class="row header-row">
+        <div class="pos">#</div>
+        <div>Player</div>
+        <div class="lvl">Lv</div>
+        <div class="rank-cell">Rank</div>
+        <div class="exp">EXP</div>
+      </div>
+      <div id="rankingList">
+        <div class="empty">Loading ranking...</div>
+      </div>
+    </div>
+
+    <div class="refresh" onclick="loadRanking()">↻ Refresh</div>
+
+    <div class="nav">
+      <a href="/profile.html">👤 Profile</a>
+      <a href="/setup.html">⚙ Setup</a>
+    </div>
+  </div>
+
+  <script>
+    const SUPABASE_URL = 'https://kfjlhujhoooudkhfblon.supabase.co'
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtmamxodWpob29vdWRraGZibG9uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2MTUyODMsImV4cCI6MjA5MzE5MTI4M30.ZeNEJbrHYX6aUXpuiSaB1XQXHOAhZ41tdO4k6NmbAz4'
+
+    async function loadRanking() {
+      const list = document.getElementById('rankingList')
+      list.innerHTML = '<div class="empty">Loading...</div>'
+
+      try {
+        const myPlayer = JSON.parse(localStorage.getItem('g2sys_player') || 'null')
+        const myId = myPlayer?.playerId
+
+        const response = await fetch(
+          `${SUPABASE_URL}/rest/v1/players?select=*&privacy=in.(public,anonymous)&order=exp_total.desc&limit=50`,
+          { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+        )
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const data = await response.json()
+
+        if (data.length === 0) {
+          list.innerHTML = '<div class="empty">No players yet. Be the first!</div>'
+          return
+        }
+
+        list.innerHTML = data.map((p, i) => {
+          const pos = i + 1
+          const isMe = p.player_id === myId
+          let posClass = 'pos'
+          if (pos === 1) posClass += ' gold'
+          else if (pos === 2) posClass += ' silver'
+          else if (pos === 3) posClass += ' bronze'
+
+          return `
+            <div class="row ${isMe ? 'me' : ''}">
+              <div class="${posClass}">${pos === 1 ? '👑' : pos}</div>
+              <div class="name">${escapeHtml(p.name)}${isMe ? ' (you)' : ''}</div>
+              <div class="lvl">${p.level}</div>
+              <div class="rank-cell">${p.rank}</div>
+              <div class="exp">${p.exp_total.toLocaleString()}</div>
+            </div>
+          `
+        }).join('')
+      } catch (err) {
+        list.innerHTML = `<div class="empty">Error loading: ${err.message}</div>`
+      }
+    }
+
+    function escapeHtml(s) {
+      const div = document.createElement('div')
+      div.textContent = s
+      return div.innerHTML
+    }
+
+    loadRanking()
+  </script>
+  <div style="text-align:center; margin-top:12px;">
+    <a href="/" style="color:#6080a0; font-size:0.85rem; text-decoration:none;">
+      ← Back to app
+    </a>
+  </div>
+</body>
+
+</html>
