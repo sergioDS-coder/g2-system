@@ -7,7 +7,14 @@
   "min_sdk_version": "0.0.10",
   "entrypoint": "index.html",
   "supported_languages": [
-    "en", "it", "fr", "de", "es", "ja", "ko", "zh", "pt", "ru"
+    "en",
+    "de",
+    "fr",
+    "es",
+    "it",
+    "zh",
+    "ja",
+    "ko"
   ],
   "description": "Solo Leveling-style daily quest gamification. Complete daily fitness and mental quests to level up, gain attributes and climb the global ranking.",
   "permissions": [

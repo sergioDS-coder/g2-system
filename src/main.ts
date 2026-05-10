@@ -57,7 +57,7 @@ let warningExpLost = 0
 // ─── Inserimento nome, lingua e privacy ───────────────────────────────────────
 
 const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-'
-const LANGS: Lang[] = ['it', 'en', 'fr', 'de', 'es', 'ja', 'ko', 'zh', 'pt', 'ru']
+const LANGS: Lang[] = ['en', 'de', 'fr', 'es', 'it', 'zh', 'ja', 'ko']
 const PRIVACY_OPTIONS = ['public', 'anonymous', 'private']
 type InputStep = 'name' | 'lang' | 'privacy'
 
