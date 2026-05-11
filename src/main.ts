@@ -1,4 +1,4 @@
-// main.ts — G2 System v1.4.0
+// main.ts — G2 System v1.4.1
 
 import {
   waitForEvenAppBridge,
@@ -64,7 +64,7 @@ type InputStep = 'name' | 'lang' | 'privacy'
 let nameBuffer = ''
 let charIdx = 0
 let inputStep: InputStep = 'name'
-let selectedLang: Lang = 'it'
+let selectedLang: Lang = 'en'
 let selectedPrivacy = 'anonymous'
 let isChangingName = false
 
@@ -198,7 +198,7 @@ async function confirmSetup() {
 async function startChangeName() {
   isChangingName = true
   nameBuffer = ''; charIdx = 0; inputStep = 'name'
-  selectedLang = (player?.language as Lang) ?? 'it'
+  selectedLang = (player?.language as Lang) ?? 'en'
   selectedPrivacy = player?.privacy ?? 'anonymous'
   currentScreen = 'nameInput'
   await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
@@ -415,8 +415,11 @@ async function handleSwipeUp() {
     case 'profile':
       if (profileIdx > 0) { profileIdx--; await display.update(display.buildProfile(player!, myRankPos, profileIdx)) } break
     case 'ranking':
-      if (rankingIdx > 0) { rankingIdx--; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx)) }
-      else if (rankingPage > 0) { rankingPage--; rankingIdx = 0; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx)) }
+      if (rankingIdx > 0) {
+        rankingIdx--; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
+      } else if (rankingPage > 0) {
+        rankingPage--; rankingIdx = 4; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
+      }
       break
   }
 }
@@ -445,14 +448,11 @@ async function handleSwipeDown() {
       if (profileIdx < 2) { profileIdx++; await display.update(display.buildProfile(player!, myRankPos, profileIdx)) } break
     case 'ranking': {
       const itemsPerPage = 4
-      const pageItems = ranking.slice(rankingPage * itemsPerPage, (rankingPage + 1) * itemsPerPage)
-      if (rankingIdx < pageItems.length) {
+      const totalPages = Math.ceil(ranking.length / itemsPerPage)
+      if (rankingIdx < itemsPerPage) {
         rankingIdx++; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
-      } else {
-        const totalPages = Math.ceil(ranking.length / itemsPerPage)
-        if (rankingPage < totalPages - 1) {
-          rankingPage++; rankingIdx = 0; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
-        }
+      } else if (rankingPage < totalPages - 1) {
+        rankingPage++; rankingIdx = 0; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
       }
       break
     }
