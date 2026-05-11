@@ -1,4 +1,4 @@
-// main.ts — G2 System v1.3.0
+// main.ts — G2 System v1.4.1
 import { waitForEvenAppBridge, OsEventTypeList, } from '@evenrealities/even_hub_sdk';
 import { addExp, subtractExp, applyPenalty, incrementQuestCount, createDefaultPlayer, getQuestsPerDay, } from './game-engine';
 import { generateDailyQuests } from './quest-data';
@@ -30,12 +30,12 @@ let pendingRankUp = null;
 let warningExpLost = 0;
 // ─── Inserimento nome, lingua e privacy ───────────────────────────────────────
 const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-';
-const LANGS = ['it', 'en', 'fr', 'de', 'es', 'ja', 'ko', 'zh', 'pt', 'ru'];
+const LANGS = ['en', 'de', 'fr', 'es', 'it', 'zh', 'ja', 'ko'];
 const PRIVACY_OPTIONS = ['public', 'anonymous', 'private'];
 let nameBuffer = '';
 let charIdx = 0;
 let inputStep = 'name';
-let selectedLang = 'it';
+let selectedLang = 'en';
 let selectedPrivacy = 'anonymous';
 let isChangingName = false;
 function currentChar() {
@@ -110,11 +110,9 @@ async function initialize() {
             await display.update(display.buildWarningScreen(warningExpLost, warningIdx));
             return;
         }
-        // Genera quest con Gemini, fallback su template locali
         const count = getQuestsPerDay(player.level);
         const aiQuests = await generateDailyQuestsAI(player.level, player.language, count);
         quests = aiQuests ?? generateDailyQuests(player.level, count, today);
-        // Quest jolly 10% probabilità
         if (Math.random() < 0.1) {
             const jolly = await generateJollyQuest(player.level, player.language);
             if (jolly)
@@ -182,7 +180,7 @@ async function startChangeName() {
     nameBuffer = '';
     charIdx = 0;
     inputStep = 'name';
-    selectedLang = player?.language ?? 'it';
+    selectedLang = player?.language ?? 'en';
     selectedPrivacy = player?.privacy ?? 'anonymous';
     currentScreen = 'nameInput';
     await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep));
@@ -248,7 +246,6 @@ async function undoQuest() {
         return;
     q.completed = false;
     await saveQuests(quests);
-    // Sottrai EXP guadagnati
     if (player) {
         player = subtractExp(player, q.expReward, q.attribute);
         player.questsCompleted = Math.max(0, player.questsCompleted - 1);
@@ -290,164 +287,136 @@ function setupEventListener() {
         }
     });
 }
+// ─── Handlers Click ───────────────────────────────────────────────────────────
 async function handlePress() {
-    switch (currentScreen) {
-        case 'setup':
-            await initialize();
-            break;
-        case 'nameInput':
-            if (inputStep === 'lang') {
-                selectedLang = currentChar();
-                inputStep = 'name';
-                charIdx = 0;
-                await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep));
-            }
-            else if (inputStep === 'privacy') {
-                selectedPrivacy = currentChar();
-                inputStep = 'name';
-                charIdx = 0;
-                await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep));
-            }
-            else if (currentChar() === 'LANG') {
-                inputStep = 'lang';
-                charIdx = LANGS.indexOf(selectedLang);
-                await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep));
-            }
-            else if (currentChar() === 'PRIV') {
-                inputStep = 'privacy';
-                charIdx = PRIVACY_OPTIONS.indexOf(selectedPrivacy);
-                await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep));
-            }
-            else if (currentChar() === 'OK' && nameBuffer.trim().length > 0) {
-                await confirmSetup();
-            }
-            else if (currentChar() === 'ESC') {
-                if (isChangingName) {
-                    isChangingName = false;
-                    await goToProfile();
-                }
-                else {
-                    currentScreen = 'setup';
-                    await display.update(display.buildSetupScreen());
-                }
-            }
-            else if (nameBuffer.length < 15 && !['OK', 'ESC', 'LANG', 'PRIV'].includes(currentChar())) {
-                nameBuffer += currentChar();
-                await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep));
-            }
-            break;
-        case 'dailyMessage':
-            if (msgIdx === 1) {
-                await bridge.shutDownPageContainer(0);
-            }
-            else {
-                await goToQuestList();
-            }
-            break;
-        case 'warning':
-            if (warningIdx === 1) {
-                await bridge.shutDownPageContainer(0);
-            }
-            else {
-                await goToQuestList();
-            }
-            break;
-        case 'allDone':
-            if (allDoneIdx === 1) {
-                await goToQuestList();
-            }
-            else {
-                await goToProfile();
-            }
-            break;
-        case 'questList':
-            if (questIdx === quests.length + 1) {
-                await bridge.shutDownPageContainer(1);
-            }
-            else if (questIdx === quests.length) {
-                await goToProfile();
-            }
-            else {
-                detailIdx = 0;
-                currentScreen = 'questDetail';
-                await display.update(display.buildQuestDetail(quests[questIdx], detailIdx));
-            }
-            break;
-        case 'questDetail': {
-            const q = quests[questIdx];
-            if (q.completed) {
-                if (detailIdx === 1) {
-                    await undoQuest();
-                }
-                else {
-                    await goToQuestList();
-                }
-            }
-            else {
-                if (detailIdx === 0) {
-                    await completeQuest();
-                }
-                else {
-                    await goToQuestList();
-                }
-            }
-            break;
-        }
-        case 'levelUp':
-            if (levelIdx === 1) {
-                await bridge.shutDownPageContainer(0);
-            }
-            else {
-                pendingLevelUp = null;
-                if (pendingRankUp) {
-                    const r = pendingRankUp.oldRank;
-                    pendingRankUp = null;
-                    rankUpIdx = 0;
-                    currentScreen = 'rankUp';
-                    await display.update(display.buildRankUp(player, r, rankUpIdx));
-                }
-                else {
-                    await goToQuestList();
-                }
-            }
-            break;
-        case 'rankUp':
-            if (rankUpIdx === 1) {
-                await bridge.shutDownPageContainer(0);
-            }
-            else {
-                pendingRankUp = null;
-                await goToQuestList();
-            }
-            break;
-        case 'profile':
-            if (profileIdx === 1) {
-                await startChangeName();
-            }
-            else if (profileIdx === 2) {
-                await goToQuestList();
-            }
-            else {
-                await goToRanking();
-            }
-            break;
-        case 'ranking': {
-            const itemsPerPage = 4;
-            if (rankingIdx === itemsPerPage) {
-                await goToProfile();
-            }
-            break;
-        }
-    }
+    const handlers = {
+        boot: async () => { },
+        setup: async () => { await initialize(); },
+        nameInput: handleNameInputPress,
+        dailyMessage: async () => { if (msgIdx === 1)
+            await bridge.shutDownPageContainer(0);
+        else
+            await goToQuestList(); },
+        warning: async () => { if (warningIdx === 1)
+            await bridge.shutDownPageContainer(0);
+        else
+            await goToQuestList(); },
+        allDone: async () => { if (allDoneIdx === 1)
+            await goToQuestList();
+        else
+            await goToProfile(); },
+        questList: handleQuestListPress,
+        questDetail: handleQuestDetailPress,
+        levelUp: handleLevelUpPress,
+        rankUp: async () => { if (rankUpIdx === 1)
+            await bridge.shutDownPageContainer(0);
+        else {
+            pendingRankUp = null;
+            await goToQuestList();
+        } },
+        profile: handleProfilePress,
+        ranking: async () => { if (rankingIdx === 4)
+            await goToProfile(); },
+        error: async () => { await initialize(); }
+    };
+    const handler = handlers[currentScreen];
+    if (handler)
+        await handler();
 }
-async function handleDoublePress() {
-    if (currentScreen === 'questList') {
+async function handleNameInputPress() {
+    if (inputStep === 'lang') {
+        selectedLang = currentChar();
+        inputStep = 'name';
+        charIdx = 0;
+    }
+    else if (inputStep === 'privacy') {
+        selectedPrivacy = currentChar();
+        inputStep = 'name';
+        charIdx = 0;
+    }
+    else if (currentChar() === 'LANG') {
+        inputStep = 'lang';
+        charIdx = LANGS.indexOf(selectedLang);
+    }
+    else if (currentChar() === 'PRIV') {
+        inputStep = 'privacy';
+        charIdx = PRIVACY_OPTIONS.indexOf(selectedPrivacy);
+    }
+    else if (currentChar() === 'OK' && nameBuffer.trim().length > 0) {
+        await confirmSetup();
+        return;
+    }
+    else if (currentChar() === 'ESC') {
+        if (isChangingName) {
+            isChangingName = false;
+            await goToProfile();
+        }
+        else {
+            currentScreen = 'setup';
+            await display.update(display.buildSetupScreen());
+        }
+        return;
+    }
+    else if (nameBuffer.length < 15 && !['OK', 'ESC', 'LANG', 'PRIV'].includes(currentChar())) {
+        nameBuffer += currentChar();
+    }
+    await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep));
+}
+async function handleQuestListPress() {
+    if (questIdx === quests.length + 1) {
         await bridge.shutDownPageContainer(1);
     }
+    else if (questIdx === quests.length) {
+        await goToProfile();
+    }
     else {
-        await bridge.shutDownPageContainer(0);
+        detailIdx = 0;
+        currentScreen = 'questDetail';
+        await display.update(display.buildQuestDetail(quests[questIdx], detailIdx));
     }
 }
+async function handleQuestDetailPress() {
+    const q = quests[questIdx];
+    if (q.completed) {
+        if (detailIdx === 1)
+            await undoQuest();
+        else
+            await goToQuestList();
+    }
+    else {
+        if (detailIdx === 0)
+            await completeQuest();
+        else
+            await goToQuestList();
+    }
+}
+async function handleLevelUpPress() {
+    if (levelIdx === 1) {
+        await bridge.shutDownPageContainer(0);
+    }
+    else {
+        pendingLevelUp = null;
+        if (pendingRankUp) {
+            const r = pendingRankUp.oldRank;
+            pendingRankUp = null;
+            rankUpIdx = 0;
+            currentScreen = 'rankUp';
+            await display.update(display.buildRankUp(player, r, rankUpIdx));
+        }
+        else {
+            await goToQuestList();
+        }
+    }
+}
+async function handleProfilePress() {
+    if (profileIdx === 1)
+        await startChangeName();
+    else if (profileIdx === 2)
+        await goToQuestList();
+    else
+        await goToRanking();
+}
+// ─── Handlers Swipe ───────────────────────────────────────────────────────────
 async function handleSwipeUp() {
     switch (currentScreen) {
         case 'nameInput':
@@ -499,7 +468,7 @@ async function handleSwipeUp() {
             }
             else if (rankingPage > 0) {
                 rankingPage--;
-                rankingIdx = 0;
+                rankingIdx = 4;
                 await display.update(display.buildRanking(ranking, rankingPage, rankingIdx));
             }
             break;
@@ -529,14 +498,12 @@ async function handleSwipeDown() {
                 await refreshQuestList();
             }
             break;
-        case 'questDetail': {
-            const maxIdx = 1;
-            if (detailIdx < maxIdx) {
+        case 'questDetail':
+            if (detailIdx < 1) {
                 detailIdx++;
                 await display.update(display.buildQuestDetail(quests[questIdx], detailIdx));
             }
             break;
-        }
         case 'levelUp':
             levelIdx = Math.min(1, levelIdx + 1);
             await display.update(display.buildLevelUp(player, pendingLevelUp?.oldLevel ?? player.level - 1, levelIdx));
@@ -553,22 +520,25 @@ async function handleSwipeDown() {
             break;
         case 'ranking': {
             const itemsPerPage = 4;
-            const pageItems = ranking.slice(rankingPage * itemsPerPage, (rankingPage + 1) * itemsPerPage);
-            if (rankingIdx < pageItems.length) {
+            const totalPages = Math.ceil(ranking.length / itemsPerPage);
+            if (rankingIdx < itemsPerPage) {
                 rankingIdx++;
                 await display.update(display.buildRanking(ranking, rankingPage, rankingIdx));
             }
-            else {
-                const totalPages = Math.ceil(ranking.length / itemsPerPage);
-                if (rankingPage < totalPages - 1) {
-                    rankingPage++;
-                    rankingIdx = 0;
-                    await display.update(display.buildRanking(ranking, rankingPage, rankingIdx));
-                }
+            else if (rankingPage < totalPages - 1) {
+                rankingPage++;
+                rankingIdx = 0;
+                await display.update(display.buildRanking(ranking, rankingPage, rankingIdx));
             }
             break;
         }
     }
+}
+async function handleDoublePress() {
+    if (currentScreen === 'questList')
+        await bridge.shutDownPageContainer(1);
+    else
+        await bridge.shutDownPageContainer(0);
 }
 main().catch(async (err) => {
     console.error('Errore fatale:', err);

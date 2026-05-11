@@ -11,7 +11,7 @@
     "@evenrealities/even_hub_sdk": "latest"
   },
   "devDependencies": {
-    "typescript": "^5.4.0",
-    "vite": "^8.0.10"
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0"
   }
 }

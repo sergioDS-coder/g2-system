@@ -1,16 +1,16 @@
-import { TextContainerProperty, CreateStartUpPageContainer, RebuildPageContainer, } from '@evenrealities/even_hub_sdk';
+import { TextContainerProperty, CreateStartUpPageContainer, } from '@evenrealities/even_hub_sdk';
 import { t } from './i18n';
 const W = 576;
 const H = 288;
 const PAD = 6;
-const LINE = '------------------------------';
-export const VERSION = 'v1.3.0';
+const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
+export const VERSION = 'v1.4.0';
 function truncate(text, maxLen) {
     if (!text)
         return '';
     if (text.length <= maxLen)
         return text;
-    return text.slice(0, maxLen - 1) + '.';
+    return text.slice(0, maxLen - 1) + '…';
 }
 function pad(text, len) {
     return text.length >= len ? text.slice(0, len) : text + ' '.repeat(len - text.length);
@@ -62,29 +62,43 @@ export class G2Display {
         if (!this.initialized || content === this.lastContent)
             return;
         this.lastContent = content;
-        const container = new TextContainerProperty({
-            xPosition: 0, yPosition: 0, width: W, height: H,
-            borderWidth: 0, borderColor: 5, paddingLength: PAD,
-            containerID: 1, containerName: 'main', content, isEventCapture: 1,
-        });
-        await this.bridge.rebuildPageContainer(new RebuildPageContainer({ containerTotalNum: 1, textObject: [container] }));
+        // textContainerUpgrade expects 1 argument (an object) in SDK 0.0.10
+        try {
+            await this.bridge.textContainerUpgrade({
+                containerID: 1,
+                containerName: 'main',
+                content: content,
+                contentOffset: 0,
+                contentLength: content.length
+            });
+        }
+        catch (e) {
+            // Fallback if the object structure is different or method fails
+            console.error('Update failed, rebuilding page', e);
+            const container = new TextContainerProperty({
+                xPosition: 0, yPosition: 0, width: W, height: H,
+                borderWidth: 0, borderColor: 5, paddingLength: PAD,
+                containerID: 1, containerName: 'main', content, isEventCapture: 1,
+            });
+            await this.bridge.rebuildPageContainer({ containerTotalNum: 1, textObject: [container] });
+        }
     }
     buildBootScreen() {
         return [
-            '============================',
-            ' o===|--[ G2 SYSTEM ]--|==>',
-            '      ARISE, PLAYER',
-            '============================',
-            ' Connecting...',
+            '╭──────────────────────────╮',
+            '│    o──|─[ G2 SYSTEM ]─|──▶  │',
+            '│       ARISE, PLAYER      │',
+            '╰──────────────────────────╯',
+            ' Connecting…',
             ` ${VERSION}`,
         ].join('\n');
     }
     buildSetupScreen() {
         return [
-            '============================',
-            ' o===|--[ G2 SYSTEM ]--|==>',
-            '      ARISE, PLAYER',
-            '============================',
+            '╭──────────────────────────╮',
+            '│    o──|─[ G2 SYSTEM ]─|──▶  │',
+            '│       ARISE, PLAYER      │',
+            '╰──────────────────────────╯',
             ' Enter your name below',
             ' using the touchpad.',
             LINE,
@@ -95,66 +109,66 @@ export class G2Display {
     buildNameInput(nameBuffer, currentChar, lang, privacy, inputStep) {
         if (inputStep === 'lang') {
             return [
-                '============================',
-                ' o===|--[ G2 SYSTEM ]--|==>',
-                ' Select language:',
-                '============================',
-                ` > ${currentChar.toUpperCase()}`,
+                '╭──────────────────────────╮',
+                '│    o──|─[ G2 SYSTEM ]─|──▶  │',
+                '│     Select language:     │',
+                '╰──────────────────────────╯',
+                ` ▶ ${currentChar.toUpperCase()}`,
                 LINE,
-                ' ^/v=Change  PRESS=Confirm',
+                ' ▲/▼=Change  PRESS=Confirm',
                 ' 2x=Cancel',
             ].join('\n');
         }
         if (inputStep === 'privacy') {
             return [
-                '============================',
-                ' o===|--[ G2 SYSTEM ]--|==>',
-                ' Select ranking privacy:',
-                '============================',
-                ` > ${currentChar.charAt(0).toUpperCase() + currentChar.slice(1)}`,
+                '╭──────────────────────────╮',
+                '│    o──|─[ G2 SYSTEM ]─|──▶  │',
+                '│ Select ranking privacy:  │',
+                '╰──────────────────────────╯',
+                ` ▶ ${currentChar.charAt(0).toUpperCase() + currentChar.slice(1)}`,
                 LINE,
-                ' Public = real name shown',
-                ' Anonymous = name hidden',
-                ' Private = not in ranking',
+                ' Public: real name shown',
+                ' Anonymous: name hidden',
+                ' Private: not in ranking',
                 LINE,
-                ' ^/v=Change  PRESS=Confirm',
+                ' ▲/▼=Change  PRESS=Confirm',
             ].join('\n');
         }
         const disp = nameBuffer + '[' + currentChar + ']';
         return [
-            '============================',
-            ' o===|--[ G2 SYSTEM ]--|==>',
-            ' Enter player name:',
-            '============================',
+            '╭──────────────────────────╮',
+            '│    o──|─[ G2 SYSTEM ]─|──▶  │',
+            '│    Enter player name:    │',
+            '╰──────────────────────────╯',
             ' ' + disp,
-            ` Lang:${lang.toUpperCase()}  Privacy:${privacy.slice(0, 3).toUpperCase()}`,
+            ` Lang:${lang.toUpperCase()}  Priv:${privacy.slice(0, 3).toUpperCase()}`,
             LINE,
-            ' ^/v=Letter  PRESS=Add',
+            ' ▲/▼=Letter  PRESS=Add',
             ' [LANG] [PRIV] [OK] [ESC]',
         ].join('\n');
     }
     buildDailyMessage(selectedIdx = 0) {
         const tr = t(this.lang);
-        const c = (i) => i === selectedIdx ? '>' : ' ';
+        const c = (i) => i === selectedIdx ? '▶' : ' ';
         return [
-            '============================',
-            ' *** SYSTEM MESSAGE ***',
-            '============================',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            '   *** SYSTEM MESSAGE ***',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
             ` ${tr.newDay}.`,
             ` ${tr.questsAwait}.`,
             LINE,
             `${c(0)} Accept Quests`,
             `${c(1)} Exit App`,
             LINE,
-            '^/v=Nav  [PRESS]=Select',
+            '▲/▼=Nav  [PRESS]=Select',
         ].join('\n');
     }
     buildWarningScreen(expLost, selectedIdx = 0) {
-        const c = (i) => i === selectedIdx ? '>' : ' ';
+        const c = (i) => i === selectedIdx ? '▶' : ' ';
         return [
-            '============================',
-            ' *** WARNING ***',
-            '============================',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            '      *** WARNING ***',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
             ' You missed a quest.',
             ` Penalty: -${expLost} EXP`,
             LINE,
@@ -163,15 +177,15 @@ export class G2Display {
             `${c(0)} Continue to Quests`,
             `${c(1)} Exit App`,
             LINE,
-            '^/v=Nav  [PRESS]=Select',
+            '▲/▼=Nav  [PRESS]=Select',
         ].join('\n');
     }
     buildAllDoneScreen(selectedIdx = 0) {
-        const c = (i) => i === selectedIdx ? '>' : ' ';
+        const c = (i) => i === selectedIdx ? '▶' : ' ';
         return [
-            '============================',
-            ' *** SYSTEM ***',
-            '============================',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            '       *** SYSTEM ***',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
             ' All quests completed!',
             ' Well done, Player.',
             ' New quests tomorrow.',
@@ -179,7 +193,7 @@ export class G2Display {
             `${c(0)} View Profile`,
             `${c(1)} Back to Quests`,
             LINE,
-            '^/v=Nav  [PRESS]=Select',
+            '▲/▼=Nav  [PRESS]=Select',
         ].join('\n');
     }
     buildQuestList(quests, selectedIdx) {
@@ -190,18 +204,18 @@ export class G2Display {
             LINE,
         ];
         quests.forEach((q, i) => {
-            const cursor = i === selectedIdx ? '>' : ' ';
-            const status = q.completed ? '[X]' : '[ ]';
+            const cursor = i === selectedIdx ? '▶' : ' ';
+            const status = q.completed ? '●' : '○';
             const name = q.jollyName ?? (tr[q.nameKey] ?? q.nameKey);
             const label = `${name} ${q.amount}${q.unit}`;
             lines.push(`${cursor}${status} ${truncate(label, 24)}`);
         });
-        const profileCursor = selectedIdx === quests.length ? '>' : ' ';
-        lines.push(`${profileCursor}[>] PROFILE`);
-        const exitCursor = selectedIdx === quests.length + 1 ? '>' : ' ';
-        lines.push(`${exitCursor}[x] EXIT`);
+        const profileCursor = selectedIdx === quests.length ? '▶' : ' ';
+        lines.push(`${profileCursor}★ PROFILE`);
+        const exitCursor = selectedIdx === quests.length + 1 ? '▶' : ' ';
+        lines.push(`${exitCursor}✕ EXIT`);
         lines.push(LINE);
-        lines.push('^/v=Nav  [PRESS]=Select');
+        lines.push('▲/▼=Nav  [PRESS]=Select');
         return lines.join('\n');
     }
     buildQuestDetail(q, selectedIdx = 0) {
@@ -209,9 +223,9 @@ export class G2Display {
         const name = q.jollyName ?? (tr[q.nameKey] ?? q.nameKey);
         const attrKey = 'attr' + q.attribute.charAt(0).toUpperCase() + q.attribute.slice(1);
         const attr = tr[attrKey] ?? q.attribute.toUpperCase();
-        const status = q.completed ? '[DONE]' : '[PENDING]';
+        const status = q.completed ? '● DONE' : '○ PENDING';
         const jollyTag = q.type === 'jolly' ? '★ JOLLY ' : '';
-        const c = (i) => i === selectedIdx ? '>' : ' ';
+        const c = (i) => i === selectedIdx ? '▶' : ' ';
         return [
             `== QUEST ==`,
             LINE,
@@ -225,57 +239,58 @@ export class G2Display {
                 : `${c(0)} Mark as Done`,
             q.completed ? '' : `${c(1)} Back to Quests`,
             LINE,
-            '^/v=Nav  [PRESS]=Select',
+            '▲/▼=Nav  [PRESS]=Select',
         ].filter(l => l !== '').join('\n');
     }
     buildLevelUp(player, oldLevel, selectedIdx = 0) {
-        const c = (i) => i === selectedIdx ? '>' : ' ';
+        const c = (i) => i === selectedIdx ? '▶' : ' ';
         return [
-            '============================',
-            ' *** LEVEL UP! ***',
-            '============================',
-            ` Lv.${oldLevel}  ->  Lv.${player.level}`,
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            '    *** LEVEL UP! ***',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            ` Lv.${oldLevel}  ──▶  Lv.${player.level}`,
             ` Rank: ${player.rank}`,
             ` Player: ${truncate(player.name, 18)}`,
             LINE,
             `${c(0)} Continue`,
             `${c(1)} Back to Quests`,
             LINE,
-            '^/v=Nav  [PRESS]=Select',
+            '▲/▼=Nav  [PRESS]=Select',
         ].join('\n');
     }
     buildRankUp(player, oldRank, selectedIdx = 0) {
-        const c = (i) => i === selectedIdx ? '>' : ' ';
+        const c = (i) => i === selectedIdx ? '▶' : ' ';
         return [
-            '============================',
-            ' *** RANK UP! ***',
-            '============================',
-            ` Rank ${oldRank}  ->  Rank ${player.rank}`,
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            '     *** RANK UP! ***',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            ` Rank ${oldRank}  ──▶  Rank ${player.rank}`,
             ` Level: ${player.level}`,
             ` Player: ${truncate(player.name, 18)}`,
             LINE,
             `${c(0)} Continue`,
             `${c(1)} Back to Quests`,
             LINE,
-            '^/v=Nav  [PRESS]=Select',
+            '▲/▼=Nav  [PRESS]=Select',
         ].join('\n');
     }
     buildProfile(player, rankPosition, selectedIdx = 0) {
         const tr = t(this.lang);
         const a = player.attributes;
         const rankPos = rankPosition ? `#${rankPosition}` : '-';
+        const c = (i) => i === selectedIdx ? '▶' : ' ';
         return [
             `== ${truncate(player.name, 16)} ${rankPos} ==`,
             `Lv.${player.level}  Rank: ${player.rank}`,
             LINE,
-            `EXP: ${player.expCurrent}`,
-            `Total: ${player.expTotal}`,
+            `EXP: ${player.expCurrent} / ${player.expTotal} total`,
             LINE,
             `${tr.attrFor}:${a.str} ${tr.attrAgi}:${a.agi} ${tr.attrVit}:${a.vit}`,
             `${tr.attrInt}:${a.int} ${tr.attrEnd}:${a.end}  Q:${player.questsCompleted}`,
             LINE,
-            '[PRESS] Ranking',
-            '[>] Change Name  [x] Back',
+            `${c(0)} Global Ranking`,
+            `${c(1)} Change Name`,
+            `${c(2)} Back`,
         ].join('\n');
     }
     buildRanking(entries, page, selectedIdx = 0) {
@@ -283,7 +298,7 @@ export class G2Display {
         const start = page * itemsPerPage;
         const pageItems = entries.slice(start, start + itemsPerPage);
         const totalPages = Math.max(1, Math.ceil(entries.length / itemsPerPage));
-        const c = (i) => i === selectedIdx ? '>' : ' ';
+        const c = (i) => i === selectedIdx ? '▶' : ' ';
         const lines = [
             `== RANKING (${page + 1}/${totalPages}) ==`,
             LINE,
@@ -291,19 +306,21 @@ export class G2Display {
         pageItems.forEach((e, i) => {
             const pos = (start + i + 1).toString().padStart(2);
             const name = truncate(e.name, 12);
-            const cursor = i === selectedIdx ? '>' : ' ';
+            const cursor = i === selectedIdx ? '▶' : ' ';
             lines.push(`${cursor} ${pos}. ${pad(name, 12)} Lv${e.level} ${e.rank}`);
         });
         lines.push(LINE);
         lines.push(`${c(itemsPerPage)} Back to Profile`);
         lines.push(LINE);
-        lines.push('^/v=Nav  [PRESS]=Select');
+        lines.push('▲/▼=Nav  [PRESS]=Select');
         return lines.join('\n');
     }
     buildError(message) {
         return [
-            '== ERROR ==',
-            LINE,
+            '╭──────────────────────────╮',
+            '│        !! ERROR !!       │',
+            '╰──────────────────────────╯',
+            '',
             truncate(message, 28),
             LINE,
             '[PRESS] Retry',
