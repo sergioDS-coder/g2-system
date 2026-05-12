@@ -23,13 +23,17 @@ export const VERSION = 'v1.5.1'
 
 function truncate(text: string, maxLen: number): string {
   if (!text) return ''
+  // Since the font is non-monospaced, we use a conservative limit
   if (text.length <= maxLen) return text
   return text.slice(0, maxLen - 1) + '…'
 }
 
 function pad(text: string, len: number): string {
+  // Pad with spaces, but note that spaces are thin in the G2 font
   return text.length >= len ? text.slice(0, len) : text + ' '.repeat(len - text.length)
 }
+
+const BRIDGE_TIMEOUT = 2500
 
 export class G2Display {
   private bridge: EvenAppBridge
@@ -67,18 +71,28 @@ export class G2Display {
       if (!ctx) return null
 
       ctx.clearRect(0, 0, 64, 64)
+      // Set a black background explicitly (0 in G2 is off)
+      ctx.fillStyle = '#000'
+      ctx.fillRect(0, 0, 64, 64)
+
       draw(ctx)
 
       const imgData = ctx.getImageData(0, 0, 64, 64).data
       const raw: number[] = []
 
       for (let i = 0; i < 4096; i += 2) {
+        // Pixel 1
         const r1 = imgData[i * 4]; const g1 = imgData[i * 4 + 1]; const b1 = imgData[i * 4 + 2]
-        const gray1 = Math.floor((r1 + g1 + b1) / 3 / 16)
+        // Use perceived luminance for better greyscale
+        const lum1 = (r1 * 0.299 + g1 * 0.587 + b1 * 0.114)
+        const gray1 = Math.min(15, Math.floor(lum1 / 16))
 
+        // Pixel 2
         const r2 = imgData[(i + 1) * 4]; const g2 = imgData[(i + 1) * 4 + 1]; const b2 = imgData[(i + 1) * 4 + 2]
-        const gray2 = Math.floor((r2 + g2 + b2) / 3 / 16)
+        const lum2 = (r2 * 0.299 + g2 * 0.587 + b2 * 0.114)
+        const gray2 = Math.min(15, Math.floor(lum2 / 16))
 
+        // High nibble: Pixel 1, Low nibble: Pixel 2
         raw.push(((gray1 & 0x0F) << 4) | (gray2 & 0x0F))
       }
       return raw
@@ -109,7 +123,12 @@ export class G2Display {
         textObject: [textContainer],
         imageObject: [imageContainer]
       })
-      const result = await this.bridge.createStartUpPageContainer(startUpContainer)
+
+      const result = await Promise.race([
+        this.bridge.createStartUpPageContainer(startUpContainer),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('initPage timeout')), 5000))
+      ])
+
       console.log('[G2Display] createStartUpPageContainer result:', result)
     } catch (e) {
       console.error('[G2Display] createStartUpPageContainer failed:', e)
@@ -139,9 +158,13 @@ export class G2Display {
         contentOffset: 0,
         contentLength: content.length
       })
-      await this.bridge.textContainerUpgrade(upgrade)
+
+      await Promise.race([
+        this.bridge.textContainerUpgrade(upgrade),
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Update timeout')), BRIDGE_TIMEOUT))
+      ])
     } catch (e) {
-      console.error('Update failed, rebuilding page', e)
+      console.warn('Update failed or timed out, rebuilding page', e)
       const textContainer = new TextContainerProperty({
         xPosition: 0, yPosition: 0, width: W, height: H,
         borderWidth: 0, borderColor: 5, paddingLength: PAD,
@@ -151,7 +174,15 @@ export class G2Display {
         containerTotalNum: 1,
         textObject: [textContainer]
       })
-      await this.bridge.rebuildPageContainer(rebuild)
+
+      try {
+        await Promise.race([
+          this.bridge.rebuildPageContainer(rebuild),
+          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Rebuild timeout')), BRIDGE_TIMEOUT))
+        ])
+      } catch (reErr) {
+        console.error('Rebuild also failed:', reErr)
+      }
     }
   }
 

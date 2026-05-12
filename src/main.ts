@@ -115,26 +115,38 @@ async function main() {
     if (bridge) {
       initBridgeStorage(bridge as any)
       display = new G2Display(bridge)
+    } else {
+      console.error('[Main] Bridge not available after timeout.')
     }
 
     if (display) {
       console.log('[Main] Initializing page...')
-      await display.initPage()
-    }
-    console.log('[Main] Page initialized.')
+      try {
+        await display.initPage()
+        console.log('[Main] Page initialized.')
 
-    console.log('[Main] Updating initial image...')
-    display.updateImage('sword').catch(e => console.error('[Main] Failed to set initial image', e))
+        console.log('[Main] Updating initial image...')
+        display.updateImage('sword').catch(e => console.error('[Main] Failed to set initial image', e))
+      } catch (pageErr) {
+        console.error('[Main] Failed to initialize page:', pageErr)
+      }
+    }
 
     const supaUrl = import.meta.env.VITE_SUPABASE_URL as string
     const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-    supabase = new SupabaseClient(supaUrl, supaKey)
+
+    if (!supaUrl || !supaKey) {
+      console.warn('[Main] Supabase credentials missing. Global ranking will be disabled.')
+    }
+    supabase = new SupabaseClient(supaUrl || '', supaKey || '')
 
     console.log('[Main] Initializing game data...')
     await initialize()
     console.log('[Main] Game data initialized.')
 
-    setupEventListener()
+    if (bridge) {
+      setupEventListener()
+    }
     console.log('[Main] App fully started.')
   } catch (err) {
     console.error('[Main] Fatal error during startup:', err)
@@ -160,14 +172,18 @@ async function initialize() {
     } else {
       nameBuffer = ''; charIdx = 0; inputStep = 'name'; isChangingName = false
       currentScreen = 'nameInput'
-      await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
+      if (display) {
+        await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
+      }
       return
     }
   } else {
     player = savedPlayer
   }
 
-  display.setLang(player.language as Lang)
+  if (display) {
+    display.setLang(player.language as Lang)
+  }
   console.log('[Init] Loading quests...')
   quests = await loadQuests()
   const today = new Date().toISOString().slice(0, 10)
@@ -202,12 +218,16 @@ async function initialize() {
     await savePlayer(player)
     await supabase.upsertPlayer(player)
     msgIdx = 0; currentScreen = 'dailyMessage'
-    await display.update(display.buildDailyMessage(msgIdx))
+    if (display) {
+      await display.update(display.buildDailyMessage(msgIdx))
+    }
   } else {
     const allDone = quests.length > 0 && quests.every(q => q.completed)
     if (allDone) {
       allDoneIdx = 0; currentScreen = 'allDone'
-      await display.update(display.buildAllDoneScreen(allDoneIdx))
+      if (display) {
+        await display.update(display.buildAllDoneScreen(allDoneIdx))
+      }
     } else {
       await goToQuestList()
     }
@@ -521,7 +541,13 @@ async function handleDoublePress() {
 }
 
 main().catch(async (err) => {
-  console.error('Errore fatale:', err)
-  try { await display?.update(display.buildError('Errore di avvio')) }
-  catch {}
+  console.error('[Main] Fatal error:', err)
+  if (display) {
+    try {
+      currentScreen = 'error'
+      await display.update(display.buildError('Avvio fallito: ' + (err instanceof Error ? err.message : 'Unknown')))
+    } catch (dispErr) {
+      console.error('[Main] Could not display error on glasses:', dispErr)
+    }
+  }
 })
