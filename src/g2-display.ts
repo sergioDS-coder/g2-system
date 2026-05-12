@@ -17,7 +17,7 @@ const W = 576
 const H = 288
 const PAD = 6
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v1.5.0'
+export const VERSION = 'v1.5.1'
 
 function truncate(text: string, maxLen: number): string {
   if (!text) return ''
@@ -35,13 +35,29 @@ export class G2Display {
   private lastContent = ''
   private lang: Lang = 'en'
   private currentIcon = ''
+  private canvas: HTMLCanvasElement
 
   constructor(bridge: EvenAppBridge) {
     this.bridge = bridge
+    this.canvas = document.createElement('canvas')
+    this.canvas.width = 64
+    this.canvas.height = 64
   }
 
   setLang(lang: Lang): void {
     this.lang = lang
+  }
+
+  private getIconAsPng(iconName: string): string | null {
+    const draw = ICONS[iconName]
+    if (!draw) return null
+    const ctx = this.canvas.getContext('2d')
+    if (!ctx) return null
+
+    ctx.clearRect(0, 0, 64, 64)
+    draw(ctx)
+    // Convert to PNG Base64 as the simulator expects a recognizable format
+    return this.canvas.toDataURL('image/png').split(',')[1]
   }
 
   async initPage(): Promise<void> {
@@ -52,7 +68,6 @@ export class G2Display {
       containerID: 1, containerName: 'main', content, isEventCapture: 1,
     })
 
-    // Placeholder image container
     const imageContainer = new ImageContainerProperty({
       xPosition: 480, yPosition: 20, width: 64, height: 64,
       containerID: 2, containerName: 'icon'
@@ -62,7 +77,7 @@ export class G2Display {
       new CreateStartUpPageContainer({
         containerTotalNum: 2,
         textObject: [textContainer],
-        imageObject: [imageContainer] as any // The SDK types might vary
+        imageObject: [imageContainer] as any
       })
     )
     this.lastContent = content
@@ -99,14 +114,14 @@ export class G2Display {
 
   async updateImage(iconName: string): Promise<void> {
     if (!this.initialized || iconName === this.currentIcon) return
-    const data = ICONS[iconName]
-    if (!data) return
+    const base64Data = this.getIconAsPng(iconName)
+    if (!base64Data) return
 
     try {
       await this.bridge.updateImageRawData(new ImageRawDataUpdate({
         containerID: 2,
         containerName: 'icon',
-        imageData: data
+        imageData: base64Data
       }))
       this.currentIcon = iconName
     } catch (e) {
