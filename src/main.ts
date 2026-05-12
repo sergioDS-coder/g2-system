@@ -1,4 +1,4 @@
-// main.ts — G2 System v1.4.1
+// main.ts — G2 System v1.5.0
 
 import {
   waitForEvenAppBridge,
@@ -207,6 +207,7 @@ async function startChangeName() {
 // ─── Navigazione ─────────────────────────────────────────────────────────────
 
 async function goToQuestList() {
+  await display.updateImage("sword")
   currentScreen = 'questList'; questIdx = 0
   await display.update(display.buildQuestList(quests, questIdx))
 }
@@ -216,12 +217,14 @@ async function refreshQuestList() {
 }
 
 async function goToProfile() {
+  await display.updateImage("player")
   currentScreen = 'profile'; profileIdx = 0
   myRankPos = await supabase.getPlayerRank(player!.playerId)
   await display.update(display.buildProfile(player!, myRankPos, profileIdx))
 }
 
 async function goToRanking() {
+  await display.updateImage("trophy")
   currentScreen = 'ranking'; rankingPage = 0; rankingIdx = 0
   ranking = await supabase.getRanking(50)
   await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))

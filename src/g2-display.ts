@@ -1,6 +1,8 @@
 import {
   TextContainerProperty,
   CreateStartUpPageContainer,
+  ImageContainerProperty,
+  ImageRawDataUpdate,
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 
@@ -9,12 +11,13 @@ import type { DailyQuest } from './quest-data'
 import type { RankingEntry } from './supabase-client'
 import type { Lang } from './i18n'
 import { t } from './i18n'
+import { ICONS } from './assets'
 
 const W = 576
 const H = 288
 const PAD = 6
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v1.4.0'
+export const VERSION = 'v1.5.0'
 
 function truncate(text: string, maxLen: number): string {
   if (!text) return ''
@@ -30,7 +33,8 @@ export class G2Display {
   private bridge: EvenAppBridge
   private initialized = false
   private lastContent = ''
-  private lang: Lang = 'it'
+  private lang: Lang = 'en'
+  private currentIcon = ''
 
   constructor(bridge: EvenAppBridge) {
     this.bridge = bridge
@@ -42,24 +46,35 @@ export class G2Display {
 
   async initPage(): Promise<void> {
     const content = this.buildBootScreen()
-    const container = new TextContainerProperty({
+    const textContainer = new TextContainerProperty({
       xPosition: 0, yPosition: 0, width: W, height: H,
       borderWidth: 0, borderColor: 5, paddingLength: PAD,
       containerID: 1, containerName: 'main', content, isEventCapture: 1,
     })
+
+    // Placeholder image container
+    const imageContainer = new ImageContainerProperty({
+      xPosition: 480, yPosition: 20, width: 64, height: 64,
+      containerID: 2, containerName: 'icon'
+    })
+
     await this.bridge.createStartUpPageContainer(
-      new CreateStartUpPageContainer({ containerTotalNum: 1, textObject: [container] })
+      new CreateStartUpPageContainer({
+        containerTotalNum: 2,
+        textObject: [textContainer],
+        imageObject: [imageContainer] as any // The SDK types might vary
+      })
     )
     this.lastContent = content
     await new Promise(r => setTimeout(r, 800))
     this.initialized = true
+    await this.updateImage('sword')
   }
 
   async update(content: string): Promise<void> {
     if (!this.initialized || content === this.lastContent) return
     this.lastContent = content
 
-    // textContainerUpgrade expects 1 argument (an object) in SDK 0.0.10
     try {
       await (this.bridge as any).textContainerUpgrade({
         containerID: 1,
@@ -69,14 +84,33 @@ export class G2Display {
         contentLength: content.length
       })
     } catch (e) {
-      // Fallback if the object structure is different or method fails
       console.error('Update failed, rebuilding page', e)
-      const container = new TextContainerProperty({
+      const textContainer = new TextContainerProperty({
         xPosition: 0, yPosition: 0, width: W, height: H,
         borderWidth: 0, borderColor: 5, paddingLength: PAD,
         containerID: 1, containerName: 'main', content, isEventCapture: 1,
       })
-      await (this.bridge as any).rebuildPageContainer({ containerTotalNum: 1, textObject: [container] })
+      await (this.bridge as any).rebuildPageContainer({
+        containerTotalNum: 1,
+        textObject: [textContainer]
+      })
+    }
+  }
+
+  async updateImage(iconName: string): Promise<void> {
+    if (!this.initialized || iconName === this.currentIcon) return
+    const data = ICONS[iconName]
+    if (!data) return
+
+    try {
+      await this.bridge.updateImageRawData(new ImageRawDataUpdate({
+        containerID: 2,
+        containerName: 'icon',
+        imageData: data
+      }))
+      this.currentIcon = iconName
+    } catch (e) {
+      console.error('Image update failed', e)
     }
   }
 
