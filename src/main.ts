@@ -33,6 +33,7 @@ let currentScreen: Screen = 'boot'
 let display: G2Display
 let bridge: Awaited<ReturnType<typeof waitForEvenAppBridge>>
 let supabase: SupabaseClient
+let isInitializing = false
 
 let player: PlayerProfile | null = null
 let quests: DailyQuest[] = []
@@ -99,22 +100,22 @@ async function main() {
 
   try {
     console.log('[Main] Waiting for bridge (with timeout)...')
-    // Timeout di 4 secondi per il bridge
+    // Increased timeout to 10 seconds for robustness
     try {
       bridge = await Promise.race([
         waitForEvenAppBridge(),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Bridge timeout')), 4000))
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Bridge timeout')), 10000))
       ])
       console.log('[Main] Bridge ready!')
     } catch (e) {
       console.error('[Main] Bridge initialization failed:', e)
-      // Se il bridge fallisce, proviamo a procedere in "mock mode" per evitare freeze totale in certi simulatori
-      // ma logghiamo pesantemente.
     }
 
     if (bridge) {
       initBridgeStorage(bridge as any)
       display = new G2Display(bridge)
+      setupEventListener()
+      console.log('[Main] Event listener set up.')
     } else {
       console.error('[Main] Bridge not available after timeout.')
     }
@@ -142,11 +143,6 @@ async function main() {
 
     console.log('[Main] Initializing game data...')
     await initialize()
-    console.log('[Main] Game data initialized.')
-
-    if (bridge) {
-      setupEventListener()
-    }
     console.log('[Main] App fully started.')
   } catch (err) {
     console.error('[Main] Fatal error during startup:', err)
@@ -157,80 +153,91 @@ async function main() {
 }
 
 async function initialize() {
-  console.log('[Init] Loading setup status and player data...')
-  const setupDone = await isSetupComplete()
-  const savedPlayer = await loadPlayer()
-  console.log('[Init] Setup done:', setupDone, 'Player loaded:', !!savedPlayer)
+  if (isInitializing) return
+  isInitializing = true
 
-  if (!setupDone || !savedPlayer || !savedPlayer.name || savedPlayer.name === 'Player') {
-    console.log('[Init] Player setup required.')
-    const netlifyPlayer = readNetlifyPlayer()
-    if (netlifyPlayer?.name && netlifyPlayer.name !== 'Player') {
-      await savePlayer(netlifyPlayer)
-      await saveSetupComplete()
-      player = netlifyPlayer
-    } else {
-      nameBuffer = ''; charIdx = 0; inputStep = 'name'; isChangingName = false
-      currentScreen = 'nameInput'
-      if (display) {
-        await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
-      }
-      return
-    }
-  } else {
-    player = savedPlayer
-  }
-
-  if (display) {
-    display.setLang(player.language as Lang)
-  }
-  console.log('[Init] Loading quests...')
-  quests = await loadQuests()
-  const today = new Date().toISOString().slice(0, 10)
-
-  console.log('[Init] Today is:', today, 'Last daily:', player.lastDailyDate)
-  if (player.lastDailyDate !== today) {
-    console.log('[Init] New day detected.')
-    const missed = quests.filter(q => !q.completed && q.date === player!.lastDailyDate)
-    if (missed.length > 0 && player.lastDailyDate) {
-      const lost = missed.reduce((s, q) => s + Math.floor(q.expReward * 0.5), 0)
-      player = applyPenalty(player, lost)
-      warningExpLost = lost
-      await savePlayer(player)
-      warningIdx = 0; currentScreen = 'warning'
-      await display.update(display.buildWarningScreen(warningExpLost, warningIdx))
-      return
-    }
-
-    const count = getQuestsPerDay(player.level)
-    console.log('[Init] Generating AI quests...')
-    const aiQuests = await generateDailyQuestsAI(player.level, player.language, count)
-    quests = aiQuests ?? generateDailyQuests(player.level, count, today)
-    console.log('[Init] Quests ready:', quests.length)
-
-    if (Math.random() < 0.1) {
-      const jolly = await generateJollyQuest(player.level, player.language)
-      if (jolly) quests.push(jolly)
-    }
-
-    await saveQuests(quests)
-    player.lastDailyDate = today
-    await savePlayer(player)
-    await supabase.upsertPlayer(player)
-    msgIdx = 0; currentScreen = 'dailyMessage'
+  try {
+    console.log('[Init] Loading setup status and player data...')
     if (display) {
-      await display.update(display.buildDailyMessage(msgIdx))
+      await display.update(display.buildLoadingScreen())
     }
-  } else {
-    const allDone = quests.length > 0 && quests.every(q => q.completed)
-    if (allDone) {
-      allDoneIdx = 0; currentScreen = 'allDone'
-      if (display) {
-        await display.update(display.buildAllDoneScreen(allDoneIdx))
+
+    const setupDone = await isSetupComplete()
+    const savedPlayer = await loadPlayer()
+    console.log('[Init] Setup done:', setupDone, 'Player loaded:', !!savedPlayer)
+
+    if (!setupDone || !savedPlayer || !savedPlayer.name || savedPlayer.name === 'Player') {
+      console.log('[Init] Player setup required.')
+      const netlifyPlayer = readNetlifyPlayer()
+      if (netlifyPlayer?.name && netlifyPlayer.name !== 'Player') {
+        await savePlayer(netlifyPlayer)
+        await saveSetupComplete()
+        player = netlifyPlayer
+      } else {
+        nameBuffer = ''; charIdx = 0; inputStep = 'name'; isChangingName = false
+        currentScreen = 'nameInput'
+        if (display) {
+          await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
+        }
+        return
       }
     } else {
-      await goToQuestList()
+      player = savedPlayer
     }
+
+    if (display) {
+      display.setLang(player.language as Lang)
+    }
+    console.log('[Init] Loading quests...')
+    quests = await loadQuests()
+    const today = new Date().toISOString().slice(0, 10)
+
+    console.log('[Init] Today is:', today, 'Last daily:', player.lastDailyDate)
+    if (player.lastDailyDate !== today) {
+      console.log('[Init] New day detected.')
+      const missed = quests.filter(q => !q.completed && q.date === player!.lastDailyDate)
+      if (missed.length > 0 && player.lastDailyDate) {
+        const lost = missed.reduce((s, q) => s + Math.floor(q.expReward * 0.5), 0)
+        player = applyPenalty(player, lost)
+        warningExpLost = lost
+        await savePlayer(player)
+        warningIdx = 0; currentScreen = 'warning'
+        await display.update(display.buildWarningScreen(warningExpLost, warningIdx))
+        return
+      }
+
+      const count = getQuestsPerDay(player.level)
+      console.log('[Init] Generating AI quests...')
+      const aiQuests = await generateDailyQuestsAI(player.level, player.language, count)
+      quests = aiQuests ?? generateDailyQuests(player.level, count, today)
+      console.log('[Init] Quests ready:', quests.length)
+
+      if (Math.random() < 0.1) {
+        const jolly = await generateJollyQuest(player.level, player.language)
+        if (jolly) quests.push(jolly)
+      }
+
+      await saveQuests(quests)
+      player.lastDailyDate = today
+      await savePlayer(player)
+      await supabase.upsertPlayer(player)
+      msgIdx = 0; currentScreen = 'dailyMessage'
+      if (display) {
+        await display.update(display.buildDailyMessage(msgIdx))
+      }
+    } else {
+      const allDone = quests.length > 0 && quests.every(q => q.completed)
+      if (allDone) {
+        allDoneIdx = 0; currentScreen = 'allDone'
+        if (display) {
+          await display.update(display.buildAllDoneScreen(allDoneIdx))
+        }
+      } else {
+        await goToQuestList()
+      }
+    }
+  } finally {
+    isInitializing = false
   }
 }
 
@@ -354,23 +361,35 @@ async function undoQuest() {
 // ─── Gestione eventi ──────────────────────────────────────────────────────────
 
 function setupEventListener() {
-  bridge.onEvenHubEvent(async (event) => {
-    const textEvent = event.textEvent
-    const sysEvent = event.sysEvent
-    const activeEvent = textEvent ?? sysEvent
-    if (!activeEvent || activeEvent.eventType === undefined) return
+  bridge.onEvenHubEvent(async (event: any) => {
+    console.log('[Bridge] Raw event:', JSON.stringify(event))
 
+    // Extract eventType from any possible location
+    let eventType = event.eventType
+    if (eventType === undefined && event.textEvent) eventType = event.textEvent.eventType
+    if (eventType === undefined && event.sysEvent) eventType = event.sysEvent.eventType
+
+    console.log('[Bridge] Extracted eventType:', eventType)
+
+    // Handle lifecycle events first
     if ([
       OsEventTypeList.FOREGROUND_ENTER_EVENT,
       OsEventTypeList.FOREGROUND_EXIT_EVENT,
       OsEventTypeList.ABNORMAL_EXIT_EVENT,
       OsEventTypeList.SYSTEM_EXIT_EVENT,
-    ].includes(activeEvent.eventType)) return
+    ].includes(eventType)) {
+      console.log('[Bridge] Lifecycle event ignored:', eventType)
+      return
+    }
 
-    switch (activeEvent.eventType) {
+    // Map common event type values
+    // 0 = CLICK, 1 = SCROLL_TOP (UP), 2 = SCROLL_BOTTOM (DOWN), 3 = DOUBLE_CLICK
+    switch (eventType) {
       case OsEventTypeList.CLICK_EVENT:
-      case undefined:
       case 0:
+      case undefined:
+      case null:
+        console.log('[Bridge] -> handlePress')
         await handlePress(); break
       case OsEventTypeList.DOUBLE_CLICK_EVENT:
         await handleDoublePress(); break
@@ -385,24 +404,33 @@ function setupEventListener() {
 // ─── Handlers Click ───────────────────────────────────────────────────────────
 
 async function handlePress() {
+  console.log('[Main] Handling press on screen:', currentScreen)
   const handlers: Record<Screen, () => Promise<void>> = {
-    boot: async () => {},
-    setup: async () => { await initialize() },
-    nameInput: handleNameInputPress,
-    dailyMessage: async () => { if (msgIdx === 1) await bridge.shutDownPageContainer(0); else await goToQuestList() },
-    warning: async () => { if (warningIdx === 1) await bridge.shutDownPageContainer(0); else await goToQuestList() },
-    allDone: async () => { if (allDoneIdx === 1) await goToQuestList(); else await goToProfile() },
-    questList: handleQuestListPress,
-    questDetail: handleQuestDetailPress,
-    levelUp: handleLevelUpPress,
-    rankUp: async () => { if (rankUpIdx === 1) await bridge.shutDownPageContainer(0); else { pendingRankUp = null; await goToQuestList() } },
-    profile: handleProfilePress,
-    ranking: async () => { if (rankingIdx === 4) await goToProfile() },
-    error: async () => { await initialize() }
+    boot: async () => { console.log('Boot screen - no action') },
+    setup: async () => { console.log('Setup -> initialize'); await initialize() },
+    nameInput: async () => { console.log('Name input action'); await handleNameInputPress() },
+    dailyMessage: async () => { console.log('Daily message action'); if (msgIdx === 1) await bridge.shutDownPageContainer(0); else await goToQuestList() },
+    warning: async () => { console.log('Warning action'); if (warningIdx === 1) await bridge.shutDownPageContainer(0); else await goToQuestList() },
+    allDone: async () => { console.log('All done action'); if (allDoneIdx === 1) await goToQuestList(); else await goToProfile() },
+    questList: async () => { console.log('Quest list action'); await handleQuestListPress() },
+    questDetail: async () => { console.log('Quest detail action'); await handleQuestDetailPress() },
+    levelUp: async () => { console.log('Level up action'); await handleLevelUpPress() },
+    rankUp: async () => { console.log('Rank up action'); if (rankUpIdx === 1) await bridge.shutDownPageContainer(0); else { pendingRankUp = null; await goToQuestList() } },
+    profile: async () => { console.log('Profile action'); await handleProfilePress() },
+    ranking: async () => { console.log('Ranking action'); if (rankingIdx === 4) await goToProfile() },
+    error: async () => { console.log('Error screen -> retry'); await initialize() }
   }
 
   const handler = handlers[currentScreen]
-  if (handler) await handler()
+  if (handler) {
+    try {
+      await handler()
+    } catch (e) {
+      console.error('[Main] Handler failed:', e)
+    }
+  } else {
+    console.warn('[Main] No handler for screen:', currentScreen)
+  }
 }
 
 async function handleNameInputPress() {

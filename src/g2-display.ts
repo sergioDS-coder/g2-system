@@ -477,6 +477,18 @@ export class G2Display {
     return lines.join('\n')
   }
 
+  buildLoadingScreen(): string {
+    return [
+      '╭──────────────────────────╮',
+      '│    o──|─[ G2 SYSTEM ]─|──▶  │',
+      '│       LOADING DATA       │',
+      '╰──────────────────────────╯',
+      '',
+      ' Connecting to Hub...',
+      ' Please wait...',
+    ].join('\n')
+  }
+
   buildError(message: string): string {
     return [
       '╭──────────────────────────╮',
