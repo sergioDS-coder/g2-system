@@ -87,25 +87,71 @@ function charsetLen(): number {
 // ─── Avvio ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  bridge = await waitForEvenAppBridge()
-  initBridgeStorage(bridge as any)
-  display = new G2Display(bridge)
-  await display.initPage()
-  await display.updateImage('sword')
+  console.log('[Main] Starting app...')
 
-  const supaUrl = import.meta.env.VITE_SUPABASE_URL as string
-  const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-  supabase = new SupabaseClient(supaUrl, supaKey)
+  // Gestione errori globale
+  window.addEventListener('error', (e) => {
+    console.error('[Global Error]', e.error)
+  })
+  window.addEventListener('unhandledrejection', (e) => {
+    console.error('[Unhandled Rejection]', e.reason)
+  })
 
-  await initialize()
-  setupEventListener()
+  try {
+    console.log('[Main] Waiting for bridge (with timeout)...')
+    // Timeout di 4 secondi per il bridge
+    try {
+      bridge = await Promise.race([
+        waitForEvenAppBridge(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Bridge timeout')), 4000))
+      ])
+      console.log('[Main] Bridge ready!')
+    } catch (e) {
+      console.error('[Main] Bridge initialization failed:', e)
+      // Se il bridge fallisce, proviamo a procedere in "mock mode" per evitare freeze totale in certi simulatori
+      // ma logghiamo pesantemente.
+    }
+
+    if (bridge) {
+      initBridgeStorage(bridge as any)
+      display = new G2Display(bridge)
+    }
+
+    if (display) {
+      console.log('[Main] Initializing page...')
+      await display.initPage()
+    }
+    console.log('[Main] Page initialized.')
+
+    console.log('[Main] Updating initial image...')
+    display.updateImage('sword').catch(e => console.error('[Main] Failed to set initial image', e))
+
+    const supaUrl = import.meta.env.VITE_SUPABASE_URL as string
+    const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+    supabase = new SupabaseClient(supaUrl, supaKey)
+
+    console.log('[Main] Initializing game data...')
+    await initialize()
+    console.log('[Main] Game data initialized.')
+
+    setupEventListener()
+    console.log('[Main] App fully started.')
+  } catch (err) {
+    console.error('[Main] Fatal error during startup:', err)
+    if (display) {
+      await display.update(display.buildError('Avvio fallito'))
+    }
+  }
 }
 
 async function initialize() {
+  console.log('[Init] Loading setup status and player data...')
   const setupDone = await isSetupComplete()
   const savedPlayer = await loadPlayer()
+  console.log('[Init] Setup done:', setupDone, 'Player loaded:', !!savedPlayer)
 
   if (!setupDone || !savedPlayer || !savedPlayer.name || savedPlayer.name === 'Player') {
+    console.log('[Init] Player setup required.')
     const netlifyPlayer = readNetlifyPlayer()
     if (netlifyPlayer?.name && netlifyPlayer.name !== 'Player') {
       await savePlayer(netlifyPlayer)
@@ -122,10 +168,13 @@ async function initialize() {
   }
 
   display.setLang(player.language as Lang)
+  console.log('[Init] Loading quests...')
   quests = await loadQuests()
   const today = new Date().toISOString().slice(0, 10)
 
+  console.log('[Init] Today is:', today, 'Last daily:', player.lastDailyDate)
   if (player.lastDailyDate !== today) {
+    console.log('[Init] New day detected.')
     const missed = quests.filter(q => !q.completed && q.date === player!.lastDailyDate)
     if (missed.length > 0 && player.lastDailyDate) {
       const lost = missed.reduce((s, q) => s + Math.floor(q.expReward * 0.5), 0)
@@ -138,8 +187,10 @@ async function initialize() {
     }
 
     const count = getQuestsPerDay(player.level)
+    console.log('[Init] Generating AI quests...')
     const aiQuests = await generateDailyQuestsAI(player.level, player.language, count)
     quests = aiQuests ?? generateDailyQuests(player.level, count, today)
+    console.log('[Init] Quests ready:', quests.length)
 
     if (Math.random() < 0.1) {
       const jolly = await generateJollyQuest(player.level, player.language)

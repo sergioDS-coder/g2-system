@@ -57,26 +57,39 @@ export class G2Display {
     this.lang = lang
   }
 
-  private getIconAsPng(iconName: string): string | null {
+  private getIconAsRaw4Bit(iconName: string): number[] | null {
     if (!this.canvas) return null
     const draw = ICONS[iconName]
     if (!draw) return null
 
     try {
-      const ctx = this.canvas.getContext('2d')
+      const ctx = this.canvas.getContext('2d', { willReadFrequently: true })
       if (!ctx) return null
 
       ctx.clearRect(0, 0, 64, 64)
       draw(ctx)
-      // Convert to PNG Base64 as the simulator expects a recognizable format
-      return this.canvas.toDataURL('image/png').split(',')[1]
+
+      const imgData = ctx.getImageData(0, 0, 64, 64).data
+      const raw: number[] = []
+
+      for (let i = 0; i < 4096; i += 2) {
+        const r1 = imgData[i * 4]; const g1 = imgData[i * 4 + 1]; const b1 = imgData[i * 4 + 2]
+        const gray1 = Math.floor((r1 + g1 + b1) / 3 / 16)
+
+        const r2 = imgData[(i + 1) * 4]; const g2 = imgData[(i + 1) * 4 + 1]; const b2 = imgData[(i + 1) * 4 + 2]
+        const gray2 = Math.floor((r2 + g2 + b2) / 3 / 16)
+
+        raw.push(((gray1 & 0x0F) << 4) | (gray2 & 0x0F))
+      }
+      return raw
     } catch (e) {
-      console.error('Failed to generate icon PNG', e)
+      console.error('[G2Display] Failed to generate raw 4-bit icon', e)
       return null
     }
   }
 
   async initPage(): Promise<void> {
+    console.log('[G2Display] initPage started')
     const content = this.buildBootScreen()
     const textContainer = new TextContainerProperty({
       xPosition: 0, yPosition: 0, width: W, height: H,
@@ -89,22 +102,35 @@ export class G2Display {
       containerID: 2, containerName: 'icon'
     })
 
-    await this.bridge.createStartUpPageContainer(
-      new CreateStartUpPageContainer({
+    console.log('[G2Display] Creating start up page containers...')
+    try {
+      const startUpContainer = new CreateStartUpPageContainer({
         containerTotalNum: 2,
         textObject: [textContainer],
         imageObject: [imageContainer]
       })
-    )
+      const result = await this.bridge.createStartUpPageContainer(startUpContainer)
+      console.log('[G2Display] createStartUpPageContainer result:', result)
+    } catch (e) {
+      console.error('[G2Display] createStartUpPageContainer failed:', e)
+      throw e
+    }
+
     this.lastContent = content
     await new Promise(r => setTimeout(r, 800))
     this.initialized = true
+    console.log('[G2Display] initPage completed')
   }
 
   async update(content: string): Promise<void> {
-    if (!this.initialized || content === this.lastContent) return
+    if (!this.initialized) {
+      console.warn('[G2Display] Update called before initialization')
+      return
+    }
+    if (content === this.lastContent) return
     this.lastContent = content
 
+    console.log('[G2Display] Updating content...')
     try {
       const upgrade = new TextContainerUpgrade({
         containerID: 1,
@@ -130,19 +156,36 @@ export class G2Display {
   }
 
   async updateImage(iconName: string): Promise<void> {
-    if (!this.initialized || iconName === this.currentIcon) return
-    const base64Data = this.getIconAsPng(iconName)
-    if (!base64Data) return
+    if (!this.initialized) {
+      console.warn('[G2Display] updateImage called before initialization')
+      return
+    }
+    if (iconName === this.currentIcon) return
+
+    console.log('[G2Display] Updating image to:', iconName)
+    const rawData = this.getIconAsRaw4Bit(iconName)
+    if (!rawData) {
+      console.warn('[G2Display] Could not get raw data for icon:', iconName)
+      return
+    }
 
     try {
-      await this.bridge.updateImageRawData(new ImageRawDataUpdate({
+      const update = new ImageRawDataUpdate({
         containerID: 2,
         containerName: 'icon',
-        imageData: base64Data
-      }))
+        imageData: rawData
+      })
+
+      // Timeout di 2 secondi per l'aggiornamento immagine
+      await Promise.race([
+        this.bridge.updateImageRawData(update),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Image update timeout')), 2000))
+      ])
+
       this.currentIcon = iconName
+      console.log('[G2Display] Image updated successfully.')
     } catch (e) {
-      console.error('Image update failed', e)
+      console.error('[G2Display] Image update failed:', e)
     }
   }
 
