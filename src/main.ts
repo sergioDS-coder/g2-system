@@ -91,6 +91,7 @@ async function main() {
   initBridgeStorage(bridge as any)
   display = new G2Display(bridge)
   await display.initPage()
+  await display.updateImage('sword')
 
   const supaUrl = import.meta.env.VITE_SUPABASE_URL as string
   const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
@@ -284,14 +285,15 @@ async function undoQuest() {
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event) => {
     const textEvent = event.textEvent
-    const sysEvent = (event as any).sysEvent
+    const sysEvent = event.sysEvent
     const activeEvent = textEvent ?? sysEvent
-    if (!activeEvent) return
+    if (!activeEvent || activeEvent.eventType === undefined) return
 
     if ([
       OsEventTypeList.FOREGROUND_ENTER_EVENT,
       OsEventTypeList.FOREGROUND_EXIT_EVENT,
       OsEventTypeList.ABNORMAL_EXIT_EVENT,
+      OsEventTypeList.SYSTEM_EXIT_EVENT,
     ].includes(activeEvent.eventType)) return
 
     switch (activeEvent.eventType) {

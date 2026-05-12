@@ -75,6 +75,12 @@ export interface Translations {
   classMage: string
   classRanger: string
   questOf: string
+  selectLanguage: string
+  selectPrivacy: string
+  enterName: string
+  privacyPublic: string
+  privacyAnon: string
+  privacyPrivate: string
 }
 
 const it: Translations = {
@@ -137,6 +143,12 @@ const it: Translations = {
   classMage: 'Mago',
   classRanger: 'Ranger',
   questOf: 'di',
+  selectLanguage: 'Seleziona lingua:',
+  selectPrivacy: 'Privacy classifica:',
+  enterName: 'Inserisci nome:',
+  privacyPublic: 'Pubblico: nome visibile',
+  privacyAnon: 'Anonimo: nome nascosto',
+  privacyPrivate: 'Privato: non in classifica',
 }
 
 const en: Translations = {
@@ -199,6 +211,12 @@ const en: Translations = {
   classMage: 'Mage',
   classRanger: 'Ranger',
   questOf: 'of',
+  selectLanguage: 'Select language:',
+  selectPrivacy: 'Ranking privacy:',
+  enterName: 'Enter player name:',
+  privacyPublic: 'Public: real name shown',
+  privacyAnon: 'Anonymous: name hidden',
+  privacyPrivate: 'Private: not in ranking',
 }
 
 const fr: Translations = {

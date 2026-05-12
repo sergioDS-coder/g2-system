@@ -3,6 +3,8 @@ import {
   CreateStartUpPageContainer,
   ImageContainerProperty,
   ImageRawDataUpdate,
+  TextContainerUpgrade,
+  RebuildPageContainer,
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 
@@ -35,13 +37,20 @@ export class G2Display {
   private lastContent = ''
   private lang: Lang = 'en'
   private currentIcon = ''
-  private canvas: HTMLCanvasElement
+  private canvas: HTMLCanvasElement | null = null
 
   constructor(bridge: EvenAppBridge) {
     this.bridge = bridge
-    this.canvas = document.createElement('canvas')
-    this.canvas.width = 64
-    this.canvas.height = 64
+    try {
+      this.canvas = document.createElement('canvas')
+      if (this.canvas) {
+        this.canvas.width = 64
+        this.canvas.height = 64
+      }
+    } catch (e) {
+      console.warn('Canvas not supported in this environment', e)
+      this.canvas = null
+    }
   }
 
   setLang(lang: Lang): void {
@@ -49,15 +58,22 @@ export class G2Display {
   }
 
   private getIconAsPng(iconName: string): string | null {
+    if (!this.canvas) return null
     const draw = ICONS[iconName]
     if (!draw) return null
-    const ctx = this.canvas.getContext('2d')
-    if (!ctx) return null
 
-    ctx.clearRect(0, 0, 64, 64)
-    draw(ctx)
-    // Convert to PNG Base64 as the simulator expects a recognizable format
-    return this.canvas.toDataURL('image/png').split(',')[1]
+    try {
+      const ctx = this.canvas.getContext('2d')
+      if (!ctx) return null
+
+      ctx.clearRect(0, 0, 64, 64)
+      draw(ctx)
+      // Convert to PNG Base64 as the simulator expects a recognizable format
+      return this.canvas.toDataURL('image/png').split(',')[1]
+    } catch (e) {
+      console.error('Failed to generate icon PNG', e)
+      return null
+    }
   }
 
   async initPage(): Promise<void> {
@@ -77,13 +93,12 @@ export class G2Display {
       new CreateStartUpPageContainer({
         containerTotalNum: 2,
         textObject: [textContainer],
-        imageObject: [imageContainer] as any
+        imageObject: [imageContainer]
       })
     )
     this.lastContent = content
     await new Promise(r => setTimeout(r, 800))
     this.initialized = true
-    await this.updateImage('sword')
   }
 
   async update(content: string): Promise<void> {
@@ -91,13 +106,14 @@ export class G2Display {
     this.lastContent = content
 
     try {
-      await (this.bridge as any).textContainerUpgrade({
+      const upgrade = new TextContainerUpgrade({
         containerID: 1,
         containerName: 'main',
         content: content,
         contentOffset: 0,
         contentLength: content.length
       })
+      await this.bridge.textContainerUpgrade(upgrade)
     } catch (e) {
       console.error('Update failed, rebuilding page', e)
       const textContainer = new TextContainerProperty({
@@ -105,10 +121,11 @@ export class G2Display {
         borderWidth: 0, borderColor: 5, paddingLength: PAD,
         containerID: 1, containerName: 'main', content, isEventCapture: 1,
       })
-      await (this.bridge as any).rebuildPageContainer({
+      const rebuild = new RebuildPageContainer({
         containerTotalNum: 1,
         textObject: [textContainer]
       })
+      await this.bridge.rebuildPageContainer(rebuild)
     }
   }
 
@@ -130,10 +147,11 @@ export class G2Display {
   }
 
   buildBootScreen(): string {
+    const tr = t(this.lang)
     return [
       '╭──────────────────────────╮',
       '│    o──|─[ G2 SYSTEM ]─|──▶  │',
-      '│       ARISE, PLAYER      │',
+      `│   ${pad(tr.systemBoot, 18)}   │`,
       '╰──────────────────────────╯',
       ' Connecting…',
       ` ${VERSION}`,
@@ -141,25 +159,26 @@ export class G2Display {
   }
 
   buildSetupScreen(): string {
+    const tr = t(this.lang)
     return [
       '╭──────────────────────────╮',
       '│    o──|─[ G2 SYSTEM ]─|──▶  │',
       '│       ARISE, PLAYER      │',
       '╰──────────────────────────╯',
-      ' Enter your name below',
-      ' using the touchpad.',
+      ` ${truncate(tr.setupInstructions, 26)}`,
       LINE,
-      ' [PRESS] Begin',
+      ` ${tr.pressToStart}`,
       ` ${VERSION}`,
     ].join('\n')
   }
 
   buildNameInput(nameBuffer: string, currentChar: string, lang: string, privacy: string, inputStep: string): string {
+    const tr = t(this.lang)
     if (inputStep === 'lang') {
       return [
         '╭──────────────────────────╮',
         '│    o──|─[ G2 SYSTEM ]─|──▶  │',
-        '│     Select language:     │',
+        `│    ${pad(tr.selectLanguage, 18)}    │`,
         '╰──────────────────────────╯',
         ` ▶ ${currentChar.toUpperCase()}`,
         LINE,
@@ -171,13 +190,13 @@ export class G2Display {
       return [
         '╭──────────────────────────╮',
         '│    o──|─[ G2 SYSTEM ]─|──▶  │',
-        '│ Select ranking privacy:  │',
+        `│    ${pad(tr.selectPrivacy, 18)}    │`,
         '╰──────────────────────────╯',
         ` ▶ ${currentChar.charAt(0).toUpperCase() + currentChar.slice(1)}`,
         LINE,
-        ' Public: real name shown',
-        ' Anonymous: name hidden',
-        ' Private: not in ranking',
+        ` ${tr.privacyPublic}`,
+        ` ${tr.privacyAnon}`,
+        ` ${tr.privacyPrivate}`,
         LINE,
         ' ▲/▼=Change  PRESS=Confirm',
       ].join('\n')
@@ -186,7 +205,7 @@ export class G2Display {
     return [
       '╭──────────────────────────╮',
       '│    o──|─[ G2 SYSTEM ]─|──▶  │',
-      '│    Enter player name:    │',
+      `│    ${pad(tr.enterName, 18)}    │`,
       '╰──────────────────────────╯',
       ' ' + disp,
       ` Lang:${lang.toUpperCase()}  Priv:${privacy.slice(0, 3).toUpperCase()}`,
@@ -282,12 +301,13 @@ export class G2Display {
     const attr = (tr as any)[attrKey] ?? q.attribute.toUpperCase()
     const status = q.completed ? '● DONE' : '○ PENDING'
     const jollyTag = q.type === 'jolly' ? '★ JOLLY ' : ''
+    const nameMax = jollyTag ? 18 : 26
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
 
     return [
       `== QUEST ==`,
       LINE,
-      `${jollyTag}${truncate(name.toUpperCase(), 26)}`,
+      `${jollyTag}${truncate(name.toUpperCase(), nameMax)}`,
       `Target: ${q.amount} ${q.unit}`,
       `Attr: ${attr}   EXP: +${q.expReward}`,
       `Status: ${status}`,
@@ -370,9 +390,10 @@ export class G2Display {
 
     pageItems.forEach((e, i) => {
       const pos = (start + i + 1).toString().padStart(2)
-      const name = truncate(e.name, 12)
+      const name = truncate(e.name, 10)
       const cursor = i === selectedIdx ? '▶' : ' '
-      lines.push(`${cursor} ${pos}. ${pad(name, 12)} Lv${e.level} ${e.rank}`)
+      const rank = e.rank.slice(0, 3).toUpperCase()
+      lines.push(`${cursor}${pos}.${pad(name, 10)} L${e.level} ${rank}`)
     })
 
     lines.push(LINE)
