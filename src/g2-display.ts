@@ -1,6 +1,10 @@
 import {
   TextContainerProperty,
   CreateStartUpPageContainer,
+  ImageContainerProperty,
+  ImageRawDataUpdate,
+  TextContainerUpgrade,
+  RebuildPageContainer,
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 
@@ -9,82 +13,219 @@ import type { DailyQuest } from './quest-data'
 import type { RankingEntry } from './supabase-client'
 import type { Lang } from './i18n'
 import { t } from './i18n'
+import { ICONS } from './assets'
 
 const W = 576
 const H = 288
 const PAD = 6
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v1.4.0'
+export const VERSION = 'v1.5.1'
 
 function truncate(text: string, maxLen: number): string {
   if (!text) return ''
+  // Since the font is non-monospaced, we use a conservative limit
   if (text.length <= maxLen) return text
   return text.slice(0, maxLen - 1) + '…'
 }
 
 function pad(text: string, len: number): string {
+  // Pad with spaces, but note that spaces are thin in the G2 font
   return text.length >= len ? text.slice(0, len) : text + ' '.repeat(len - text.length)
 }
+
+const BRIDGE_TIMEOUT = 2500
 
 export class G2Display {
   private bridge: EvenAppBridge
   private initialized = false
   private lastContent = ''
-  private lang: Lang = 'it'
+  private lang: Lang = 'en'
+  private currentIcon = ''
+  private canvas: HTMLCanvasElement | null = null
 
   constructor(bridge: EvenAppBridge) {
     this.bridge = bridge
+    try {
+      this.canvas = document.createElement('canvas')
+      if (this.canvas) {
+        this.canvas.width = 64
+        this.canvas.height = 64
+      }
+    } catch (e) {
+      console.warn('Canvas not supported in this environment', e)
+      this.canvas = null
+    }
   }
 
   setLang(lang: Lang): void {
     this.lang = lang
   }
 
+  private getIconAsRaw4Bit(iconName: string): number[] | null {
+    if (!this.canvas) return null
+    const draw = ICONS[iconName]
+    if (!draw) return null
+    
+    try {
+      const ctx = this.canvas.getContext('2d', { willReadFrequently: true })
+      if (!ctx) return null
+      
+      ctx.clearRect(0, 0, 64, 64)
+      // Set a black background explicitly (0 in G2 is off)
+      ctx.fillStyle = '#000'
+      ctx.fillRect(0, 0, 64, 64)
+      
+      draw(ctx)
+      
+      const imgData = ctx.getImageData(0, 0, 64, 64).data
+      const raw: number[] = []
+      
+      for (let i = 0; i < 4096; i += 2) {
+        // Pixel 1
+        const r1 = imgData[i * 4]; const g1 = imgData[i * 4 + 1]; const b1 = imgData[i * 4 + 2]
+        // Use perceived luminance for better greyscale
+        const lum1 = (r1 * 0.299 + g1 * 0.587 + b1 * 0.114)
+        const gray1 = Math.min(15, Math.floor(lum1 / 16))
+        
+        // Pixel 2
+        const r2 = imgData[(i + 1) * 4]; const g2 = imgData[(i + 1) * 4 + 1]; const b2 = imgData[(i + 1) * 4 + 2]
+        const lum2 = (r2 * 0.299 + g2 * 0.587 + b2 * 0.114)
+        const gray2 = Math.min(15, Math.floor(lum2 / 16))
+        
+        // High nibble: Pixel 1, Low nibble: Pixel 2
+        raw.push(((gray1 & 0x0F) << 4) | (gray2 & 0x0F))
+      }
+      return raw
+    } catch (e) {
+      console.error('[G2Display] Failed to generate raw 4-bit icon', e)
+      return null
+    }
+  }
+
   async initPage(): Promise<void> {
+    console.log('[G2Display] initPage started')
     const content = this.buildBootScreen()
-    const container = new TextContainerProperty({
+    const textContainer = new TextContainerProperty({
       xPosition: 0, yPosition: 0, width: W, height: H,
       borderWidth: 0, borderColor: 5, paddingLength: PAD,
       containerID: 1, containerName: 'main', content, isEventCapture: 1,
     })
-    await this.bridge.createStartUpPageContainer(
-      new CreateStartUpPageContainer({ containerTotalNum: 1, textObject: [container] })
-    )
+
+    const imageContainer = new ImageContainerProperty({
+      xPosition: 480, yPosition: 20, width: 64, height: 64,
+      containerID: 2, containerName: 'icon'
+    })
+
+    console.log('[G2Display] Creating start up page containers...')
+    try {
+      const startUpContainer = new CreateStartUpPageContainer({ 
+        containerTotalNum: 2, 
+        textObject: [textContainer],
+        imageObject: [imageContainer]
+      })
+      
+      const result = await Promise.race([
+        this.bridge.createStartUpPageContainer(startUpContainer),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('initPage timeout')), 5000))
+      ])
+      
+      console.log('[G2Display] createStartUpPageContainer result:', result)
+    } catch (e) {
+      console.error('[G2Display] createStartUpPageContainer failed:', e)
+      throw e
+    }
+
     this.lastContent = content
     await new Promise(r => setTimeout(r, 800))
     this.initialized = true
+    console.log('[G2Display] initPage completed')
   }
 
   async update(content: string): Promise<void> {
-    if (!this.initialized || content === this.lastContent) return
+    if (!this.initialized) {
+      console.warn('[G2Display] Update called before initialization')
+      return
+    }
+    if (content === this.lastContent) return
     this.lastContent = content
     
-    // textContainerUpgrade expects 1 argument (an object) in SDK 0.0.10
+    console.log('[G2Display] Updating content...')
     try {
-      await (this.bridge as any).textContainerUpgrade({
+      const upgrade = new TextContainerUpgrade({
         containerID: 1,
         containerName: 'main',
         content: content,
         contentOffset: 0,
         contentLength: content.length
       })
+      
+      await Promise.race([
+        this.bridge.textContainerUpgrade(upgrade),
+        new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Update timeout')), BRIDGE_TIMEOUT))
+      ])
     } catch (e) {
-      // Fallback if the object structure is different or method fails
-      console.error('Update failed, rebuilding page', e)
-      const container = new TextContainerProperty({
+      console.warn('Update failed or timed out, rebuilding page', e)
+      const textContainer = new TextContainerProperty({
         xPosition: 0, yPosition: 0, width: W, height: H,
         borderWidth: 0, borderColor: 5, paddingLength: PAD,
         containerID: 1, containerName: 'main', content, isEventCapture: 1,
       })
-      await (this.bridge as any).rebuildPageContainer({ containerTotalNum: 1, textObject: [container] })
+      const rebuild = new RebuildPageContainer({ 
+        containerTotalNum: 1, 
+        textObject: [textContainer] 
+      })
+      
+      try {
+        await Promise.race([
+          this.bridge.rebuildPageContainer(rebuild),
+          new Promise<void>((_, reject) => setTimeout(() => reject(new Error('Rebuild timeout')), BRIDGE_TIMEOUT))
+        ])
+      } catch (reErr) {
+        console.error('Rebuild also failed:', reErr)
+      }
+    }
+  }
+
+  async updateImage(iconName: string): Promise<void> {
+    if (!this.initialized) {
+      console.warn('[G2Display] updateImage called before initialization')
+      return
+    }
+    if (iconName === this.currentIcon) return
+    
+    console.log('[G2Display] Updating image to:', iconName)
+    const rawData = this.getIconAsRaw4Bit(iconName)
+    if (!rawData) {
+      console.warn('[G2Display] Could not get raw data for icon:', iconName)
+      return
+    }
+
+    try {
+      const update = new ImageRawDataUpdate({
+        containerID: 2,
+        containerName: 'icon',
+        imageData: rawData
+      })
+      
+      // Timeout di 2 secondi per l'aggiornamento immagine
+      await Promise.race([
+        this.bridge.updateImageRawData(update),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Image update timeout')), 2000))
+      ])
+      
+      this.currentIcon = iconName
+      console.log('[G2Display] Image updated successfully.')
+    } catch (e) {
+      console.error('[G2Display] Image update failed:', e)
     }
   }
 
   buildBootScreen(): string {
+    const tr = t(this.lang)
     return [
       '╭──────────────────────────╮',
       '│    o──|─[ G2 SYSTEM ]─|──▶  │',
-      '│       ARISE, PLAYER      │',
+      `│   ${pad(tr.systemBoot, 18)}   │`,
       '╰──────────────────────────╯',
       ' Connecting…',
       ` ${VERSION}`,
@@ -92,25 +233,26 @@ export class G2Display {
   }
 
   buildSetupScreen(): string {
+    const tr = t(this.lang)
     return [
       '╭──────────────────────────╮',
       '│    o──|─[ G2 SYSTEM ]─|──▶  │',
       '│       ARISE, PLAYER      │',
       '╰──────────────────────────╯',
-      ' Enter your name below',
-      ' using the touchpad.',
+      ` ${truncate(tr.setupInstructions, 26)}`,
       LINE,
-      ' [PRESS] Begin',
+      ` ${tr.pressToStart}`,
       ` ${VERSION}`,
     ].join('\n')
   }
 
   buildNameInput(nameBuffer: string, currentChar: string, lang: string, privacy: string, inputStep: string): string {
+    const tr = t(this.lang)
     if (inputStep === 'lang') {
       return [
         '╭──────────────────────────╮',
         '│    o──|─[ G2 SYSTEM ]─|──▶  │',
-        '│     Select language:     │',
+        `│    ${pad(tr.selectLanguage, 18)}    │`,
         '╰──────────────────────────╯',
         ` ▶ ${currentChar.toUpperCase()}`,
         LINE,
@@ -122,13 +264,13 @@ export class G2Display {
       return [
         '╭──────────────────────────╮',
         '│    o──|─[ G2 SYSTEM ]─|──▶  │',
-        '│ Select ranking privacy:  │',
+        `│    ${pad(tr.selectPrivacy, 18)}    │`,
         '╰──────────────────────────╯',
         ` ▶ ${currentChar.charAt(0).toUpperCase() + currentChar.slice(1)}`,
         LINE,
-        ' Public: real name shown',
-        ' Anonymous: name hidden',
-        ' Private: not in ranking',
+        ` ${tr.privacyPublic}`,
+        ` ${tr.privacyAnon}`,
+        ` ${tr.privacyPrivate}`,
         LINE,
         ' ▲/▼=Change  PRESS=Confirm',
       ].join('\n')
@@ -137,7 +279,7 @@ export class G2Display {
     return [
       '╭──────────────────────────╮',
       '│    o──|─[ G2 SYSTEM ]─|──▶  │',
-      '│    Enter player name:    │',
+      `│    ${pad(tr.enterName, 18)}    │`,
       '╰──────────────────────────╯',
       ' ' + disp,
       ` Lang:${lang.toUpperCase()}  Priv:${privacy.slice(0, 3).toUpperCase()}`,
@@ -233,12 +375,13 @@ export class G2Display {
     const attr = (tr as any)[attrKey] ?? q.attribute.toUpperCase()
     const status = q.completed ? '● DONE' : '○ PENDING'
     const jollyTag = q.type === 'jolly' ? '★ JOLLY ' : ''
+    const nameMax = jollyTag ? 18 : 26
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
 
     return [
       `== QUEST ==`,
       LINE,
-      `${jollyTag}${truncate(name.toUpperCase(), 26)}`,
+      `${jollyTag}${truncate(name.toUpperCase(), nameMax)}`,
       `Target: ${q.amount} ${q.unit}`,
       `Attr: ${attr}   EXP: +${q.expReward}`,
       `Status: ${status}`,
@@ -321,9 +464,10 @@ export class G2Display {
 
     pageItems.forEach((e, i) => {
       const pos = (start + i + 1).toString().padStart(2)
-      const name = truncate(e.name, 12)
+      const name = truncate(e.name, 10)
       const cursor = i === selectedIdx ? '▶' : ' '
-      lines.push(`${cursor} ${pos}. ${pad(name, 12)} Lv${e.level} ${e.rank}`)
+      const rank = e.rank.slice(0, 3).toUpperCase()
+      lines.push(`${cursor}${pos}.${pad(name, 10)} L${e.level} ${rank}`)
     })
 
     lines.push(LINE)
@@ -331,6 +475,18 @@ export class G2Display {
     lines.push(LINE)
     lines.push('▲/▼=Nav  [PRESS]=Select')
     return lines.join('\n')
+  }
+
+  buildLoadingScreen(): string {
+    return [
+      '╭──────────────────────────╮',
+      '│    o──|─[ G2 SYSTEM ]─|──▶  │',
+      '│       LOADING DATA       │',
+      '╰──────────────────────────╯',
+      '',
+      ' Connecting to Hub...',
+      ' Please wait...',
+    ].join('\n')
   }
 
   buildError(message: string): string {

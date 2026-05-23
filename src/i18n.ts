@@ -75,6 +75,12 @@ export interface Translations {
   classMage: string
   classRanger: string
   questOf: string
+  selectLanguage: string
+  selectPrivacy: string
+  enterName: string
+  privacyPublic: string
+  privacyAnon: string
+  privacyPrivate: string
 }
 
 const it: Translations = {
@@ -109,7 +115,7 @@ const it: Translations = {
   expLost: 'EXP persi',
   noQuests: 'Nessuna quest disponibile',
   setupRequired: 'CONFIGURAZIONE',
-  setupInstructions: 'Apri /setup.html sul telefono',
+  setupInstructions: 'Apri /setup.html nel browser',
   pressToContinue: '[PRESS] Continua',
   pressToStart: '[PRESS] Inizia',
   pressToComplete: '[PRESS] Completata',
@@ -137,6 +143,12 @@ const it: Translations = {
   classMage: 'Mago',
   classRanger: 'Ranger',
   questOf: 'di',
+  selectLanguage: 'Seleziona lingua:',
+  selectPrivacy: 'Privacy classifica:',
+  enterName: 'Inserisci nome:',
+  privacyPublic: 'Pubblico: nome visibile',
+  privacyAnon: 'Anonimo: nome nascosto',
+  privacyPrivate: 'Privato: non in classifica',
 }
 
 const en: Translations = {
@@ -171,7 +183,7 @@ const en: Translations = {
   expLost: 'EXP lost',
   noQuests: 'No quests available',
   setupRequired: 'SETUP',
-  setupInstructions: 'Open /setup.html on phone',
+  setupInstructions: 'Open /setup.html in browser',
   pressToContinue: '[PRESS] Continue',
   pressToStart: '[PRESS] Start',
   pressToComplete: '[PRESS] Done',
@@ -199,6 +211,12 @@ const en: Translations = {
   classMage: 'Mage',
   classRanger: 'Ranger',
   questOf: 'of',
+  selectLanguage: 'Select language:',
+  selectPrivacy: 'Ranking privacy:',
+  enterName: 'Enter player name:',
+  privacyPublic: 'Public: real name shown',
+  privacyAnon: 'Anonymous: name hidden',
+  privacyPrivate: 'Private: not in ranking',
 }
 
 const fr: Translations = {
@@ -229,7 +247,7 @@ const fr: Translations = {
   warning: 'AVERTISSEMENT',
   questMissed: 'Vous avez raté une quête',
   setupRequired: 'CONFIGURATION',
-  setupInstructions: 'Ouvrir /setup.html sur le téléphone',
+  setupInstructions: 'Ouvrir /setup.html',
   pressToContinue: '[PRESS] Continuer',
   pressToStart: '[PRESS] Démarrer',
   pressToComplete: '[PRESS] Fait',
@@ -265,7 +283,7 @@ const de: Translations = {
   rankUp: 'RANG AUFGESTIEGEN!',
   warning: 'WARNUNG',
   setupRequired: 'EINSTELLUNGEN',
-  setupInstructions: '/setup.html auf dem Handy öffnen',
+  setupInstructions: 'Öffne /setup.html im Browser',
   pressToContinue: '[PRESS] Weiter',
   pressToStart: '[PRESS] Starten',
   pressToComplete: '[PRESS] Fertig',

@@ -1,4 +1,4 @@
-// main.ts — G2 System v1.4.1
+// main.ts — G2 System v1.5.0
 
 import {
   waitForEvenAppBridge,
@@ -33,6 +33,7 @@ let currentScreen: Screen = 'boot'
 let display: G2Display
 let bridge: Awaited<ReturnType<typeof waitForEvenAppBridge>>
 let supabase: SupabaseClient
+let isInitializing = false
 
 let player: PlayerProfile | null = null
 let quests: DailyQuest[] = []
@@ -87,78 +88,156 @@ function charsetLen(): number {
 // ─── Avvio ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  bridge = await waitForEvenAppBridge()
-  initBridgeStorage(bridge as any)
-  display = new G2Display(bridge)
-  await display.initPage()
+  console.log('[Main] Starting app...')
+  
+  // Gestione errori globale
+  window.addEventListener('error', (e) => {
+    console.error('[Global Error]', e.error)
+  })
+  window.addEventListener('unhandledrejection', (e) => {
+    console.error('[Unhandled Rejection]', e.reason)
+  })
 
-  const supaUrl = import.meta.env.VITE_SUPABASE_URL as string
-  const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-  supabase = new SupabaseClient(supaUrl, supaKey)
+  try {
+    console.log('[Main] Waiting for bridge (with timeout)...')
+    // Increased timeout to 10 seconds for robustness
+    try {
+      bridge = await Promise.race([
+        waitForEvenAppBridge(),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Bridge timeout')), 10000))
+      ])
+      console.log('[Main] Bridge ready!')
+    } catch (e) {
+      console.error('[Main] Bridge initialization failed:', e)
+    }
 
-  await initialize()
-  setupEventListener()
+    if (bridge) {
+      initBridgeStorage(bridge as any)
+      display = new G2Display(bridge)
+      setupEventListener()
+      console.log('[Main] Event listener set up.')
+    } else {
+      console.error('[Main] Bridge not available after timeout.')
+    }
+    
+    if (display) {
+      console.log('[Main] Initializing page...')
+      try {
+        await display.initPage()
+        console.log('[Main] Page initialized.')
+        
+        console.log('[Main] Updating initial image...')
+        display.updateImage('sword').catch(e => console.error('[Main] Failed to set initial image', e))
+      } catch (pageErr) {
+        console.error('[Main] Failed to initialize page:', pageErr)
+      }
+    }
+
+    const supaUrl = import.meta.env.VITE_SUPABASE_URL as string
+    const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+    
+    if (!supaUrl || !supaKey) {
+      console.warn('[Main] Supabase credentials missing. Global ranking will be disabled.')
+    }
+    supabase = new SupabaseClient(supaUrl || '', supaKey || '')
+
+    console.log('[Main] Initializing game data...')
+    await initialize()
+    console.log('[Main] App fully started.')
+  } catch (err) {
+    console.error('[Main] Fatal error during startup:', err)
+    if (display) {
+      await display.update(display.buildError('Avvio fallito'))
+    }
+  }
 }
 
 async function initialize() {
-  const setupDone = await isSetupComplete()
-  const savedPlayer = await loadPlayer()
+  if (isInitializing) return
+  isInitializing = true
 
-  if (!setupDone || !savedPlayer || !savedPlayer.name || savedPlayer.name === 'Player') {
-    const netlifyPlayer = readNetlifyPlayer()
-    if (netlifyPlayer?.name && netlifyPlayer.name !== 'Player') {
-      await savePlayer(netlifyPlayer)
-      await saveSetupComplete()
-      player = netlifyPlayer
-    } else {
-      nameBuffer = ''; charIdx = 0; inputStep = 'name'; isChangingName = false
-      currentScreen = 'nameInput'
-      await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
-      return
+  try {
+    console.log('[Init] Loading setup status and player data...')
+    if (display) {
+      await display.update(display.buildLoadingScreen())
     }
-  } else {
-    player = savedPlayer
-  }
 
-  display.setLang(player.language as Lang)
-  quests = await loadQuests()
-  const today = new Date().toISOString().slice(0, 10)
+    const setupDone = await isSetupComplete()
+    const savedPlayer = await loadPlayer()
+    console.log('[Init] Setup done:', setupDone, 'Player loaded:', !!savedPlayer)
 
-  if (player.lastDailyDate !== today) {
-    const missed = quests.filter(q => !q.completed && q.date === player!.lastDailyDate)
-    if (missed.length > 0 && player.lastDailyDate) {
-      const lost = missed.reduce((s, q) => s + Math.floor(q.expReward * 0.5), 0)
-      player = applyPenalty(player, lost)
-      warningExpLost = lost
+    if (!setupDone || !savedPlayer || !savedPlayer.name || savedPlayer.name === 'Player') {
+      console.log('[Init] Player setup required.')
+      const netlifyPlayer = readNetlifyPlayer()
+      if (netlifyPlayer?.name && netlifyPlayer.name !== 'Player') {
+        await savePlayer(netlifyPlayer)
+        await saveSetupComplete()
+        player = netlifyPlayer
+      } else {
+        nameBuffer = ''; charIdx = 0; inputStep = 'name'; isChangingName = false
+        currentScreen = 'nameInput'
+        if (display) {
+          await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
+        }
+        return
+      }
+    } else {
+      player = savedPlayer
+    }
+
+    if (display) {
+      display.setLang(player.language as Lang)
+    }
+    console.log('[Init] Loading quests...')
+    quests = await loadQuests()
+    const today = new Date().toISOString().slice(0, 10)
+
+    console.log('[Init] Today is:', today, 'Last daily:', player.lastDailyDate)
+    if (player.lastDailyDate !== today) {
+      console.log('[Init] New day detected.')
+      const missed = quests.filter(q => !q.completed && q.date === player!.lastDailyDate)
+      if (missed.length > 0 && player.lastDailyDate) {
+        const lost = missed.reduce((s, q) => s + Math.floor(q.expReward * 0.5), 0)
+        player = applyPenalty(player, lost)
+        warningExpLost = lost
+        await savePlayer(player)
+        warningIdx = 0; currentScreen = 'warning'
+        await display.update(display.buildWarningScreen(warningExpLost, warningIdx))
+        return
+      }
+
+      const count = getQuestsPerDay(player.level)
+      console.log('[Init] Generating AI quests...')
+      const aiQuests = await generateDailyQuestsAI(player.level, player.language, count)
+      quests = aiQuests ?? generateDailyQuests(player.level, count, today)
+      console.log('[Init] Quests ready:', quests.length)
+
+      if (Math.random() < 0.1) {
+        const jolly = await generateJollyQuest(player.level, player.language)
+        if (jolly) quests.push(jolly)
+      }
+
+      await saveQuests(quests)
+      player.lastDailyDate = today
       await savePlayer(player)
-      warningIdx = 0; currentScreen = 'warning'
-      await display.update(display.buildWarningScreen(warningExpLost, warningIdx))
-      return
-    }
-
-    const count = getQuestsPerDay(player.level)
-    const aiQuests = await generateDailyQuestsAI(player.level, player.language, count)
-    quests = aiQuests ?? generateDailyQuests(player.level, count, today)
-
-    if (Math.random() < 0.1) {
-      const jolly = await generateJollyQuest(player.level, player.language)
-      if (jolly) quests.push(jolly)
-    }
-
-    await saveQuests(quests)
-    player.lastDailyDate = today
-    await savePlayer(player)
-    await supabase.upsertPlayer(player)
-    msgIdx = 0; currentScreen = 'dailyMessage'
-    await display.update(display.buildDailyMessage(msgIdx))
-  } else {
-    const allDone = quests.length > 0 && quests.every(q => q.completed)
-    if (allDone) {
-      allDoneIdx = 0; currentScreen = 'allDone'
-      await display.update(display.buildAllDoneScreen(allDoneIdx))
+      await supabase.upsertPlayer(player)
+      msgIdx = 0; currentScreen = 'dailyMessage'
+      if (display) {
+        await display.update(display.buildDailyMessage(msgIdx))
+      }
     } else {
-      await goToQuestList()
+      const allDone = quests.length > 0 && quests.every(q => q.completed)
+      if (allDone) {
+        allDoneIdx = 0; currentScreen = 'allDone'
+        if (display) {
+          await display.update(display.buildAllDoneScreen(allDoneIdx))
+        }
+      } else {
+        await goToQuestList()
+      }
     }
+  } finally {
+    isInitializing = false
   }
 }
 
@@ -208,20 +287,30 @@ async function startChangeName() {
 
 async function goToQuestList() {
   currentScreen = 'questList'; questIdx = 0
+  if (quests[questIdx]) {
+    await display.updateImage(quests[questIdx].icon)
+  } else {
+    await display.updateImage("sword")
+  }
   await display.update(display.buildQuestList(quests, questIdx))
 }
 
 async function refreshQuestList() {
+  if (quests[questIdx]) {
+    await display.updateImage(quests[questIdx].icon)
+  }
   await display.update(display.buildQuestList(quests, questIdx))
 }
 
 async function goToProfile() {
+  await display.updateImage("player")
   currentScreen = 'profile'; profileIdx = 0
   myRankPos = await supabase.getPlayerRank(player!.playerId)
   await display.update(display.buildProfile(player!, myRankPos, profileIdx))
 }
 
 async function goToRanking() {
+  await display.updateImage("trophy")
   currentScreen = 'ranking'; rankingPage = 0; rankingIdx = 0
   ranking = await supabase.getRanking(50)
   await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
@@ -279,22 +368,35 @@ async function undoQuest() {
 // ─── Gestione eventi ──────────────────────────────────────────────────────────
 
 function setupEventListener() {
-  bridge.onEvenHubEvent(async (event) => {
-    const textEvent = event.textEvent
-    const sysEvent = (event as any).sysEvent
-    const activeEvent = textEvent ?? sysEvent
-    if (!activeEvent) return
+  bridge.onEvenHubEvent(async (event: any) => {
+    console.log('[Bridge] Raw event:', JSON.stringify(event))
+    
+    // Extract eventType from any possible location
+    let eventType = event.eventType
+    if (eventType === undefined && event.textEvent) eventType = event.textEvent.eventType
+    if (eventType === undefined && event.sysEvent) eventType = event.sysEvent.eventType
+    
+    console.log('[Bridge] Extracted eventType:', eventType)
 
+    // Handle lifecycle events first
     if ([
       OsEventTypeList.FOREGROUND_ENTER_EVENT,
       OsEventTypeList.FOREGROUND_EXIT_EVENT,
       OsEventTypeList.ABNORMAL_EXIT_EVENT,
-    ].includes(activeEvent.eventType)) return
+      OsEventTypeList.SYSTEM_EXIT_EVENT,
+    ].includes(eventType)) {
+      console.log('[Bridge] Lifecycle event ignored:', eventType)
+      return
+    }
 
-    switch (activeEvent.eventType) {
+    // Map common event type values
+    // 0 = CLICK, 1 = SCROLL_TOP (UP), 2 = SCROLL_BOTTOM (DOWN), 3 = DOUBLE_CLICK
+    switch (eventType) {
       case OsEventTypeList.CLICK_EVENT:
-      case undefined:
       case 0:
+      case undefined:
+      case null:
+        console.log('[Bridge] -> handlePress')
         await handlePress(); break
       case OsEventTypeList.DOUBLE_CLICK_EVENT:
         await handleDoublePress(); break
@@ -309,24 +411,33 @@ function setupEventListener() {
 // ─── Handlers Click ───────────────────────────────────────────────────────────
 
 async function handlePress() {
+  console.log('[Main] Handling press on screen:', currentScreen)
   const handlers: Record<Screen, () => Promise<void>> = {
-    boot: async () => {},
-    setup: async () => { await initialize() },
-    nameInput: handleNameInputPress,
-    dailyMessage: async () => { if (msgIdx === 1) await bridge.shutDownPageContainer(0); else await goToQuestList() },
-    warning: async () => { if (warningIdx === 1) await bridge.shutDownPageContainer(0); else await goToQuestList() },
-    allDone: async () => { if (allDoneIdx === 1) await goToQuestList(); else await goToProfile() },
-    questList: handleQuestListPress,
-    questDetail: handleQuestDetailPress,
-    levelUp: handleLevelUpPress,
-    rankUp: async () => { if (rankUpIdx === 1) await bridge.shutDownPageContainer(0); else { pendingRankUp = null; await goToQuestList() } },
-    profile: handleProfilePress,
-    ranking: async () => { if (rankingIdx === 4) await goToProfile() },
-    error: async () => { await initialize() }
+    boot: async () => { console.log('Boot screen - no action') },
+    setup: async () => { console.log('Setup -> initialize'); await initialize() },
+    nameInput: async () => { console.log('Name input action'); await handleNameInputPress() },
+    dailyMessage: async () => { console.log('Daily message action'); if (msgIdx === 1) await bridge.shutDownPageContainer(0); else await goToQuestList() },
+    warning: async () => { console.log('Warning action'); if (warningIdx === 1) await bridge.shutDownPageContainer(0); else await goToQuestList() },
+    allDone: async () => { console.log('All done action'); if (allDoneIdx === 1) await goToQuestList(); else await goToProfile() },
+    questList: async () => { console.log('Quest list action'); await handleQuestListPress() },
+    questDetail: async () => { console.log('Quest detail action'); await handleQuestDetailPress() },
+    levelUp: async () => { console.log('Level up action'); await handleLevelUpPress() },
+    rankUp: async () => { console.log('Rank up action'); if (rankUpIdx === 1) await bridge.shutDownPageContainer(0); else { pendingRankUp = null; await goToQuestList() } },
+    profile: async () => { console.log('Profile action'); await handleProfilePress() },
+    ranking: async () => { console.log('Ranking action'); if (rankingIdx === 4) await goToProfile() },
+    error: async () => { console.log('Error screen -> retry'); await initialize() }
   }
 
   const handler = handlers[currentScreen]
-  if (handler) await handler()
+  if (handler) {
+    try {
+      await handler()
+    } catch (e) {
+      console.error('[Main] Handler failed:', e)
+    }
+  } else {
+    console.warn('[Main] No handler for screen:', currentScreen)
+  }
 }
 
 async function handleNameInputPress() {
@@ -352,11 +463,14 @@ async function handleNameInputPress() {
 
 async function handleQuestListPress() {
   if (questIdx === quests.length + 1) {
-    await bridge.shutDownPageContainer(1)
+    await bridge.shutDownPageContainer(0)
   } else if (questIdx === quests.length) {
     await goToProfile()
   } else {
     detailIdx = 0; currentScreen = 'questDetail'
+    if (quests[questIdx]) {
+      await display.updateImage(quests[questIdx].icon)
+    }
     await display.update(display.buildQuestDetail(quests[questIdx], detailIdx))
   }
 }
@@ -460,12 +574,19 @@ async function handleSwipeDown() {
 }
 
 async function handleDoublePress() {
-  if (currentScreen === 'questList') await bridge.shutDownPageContainer(1)
-  else await bridge.shutDownPageContainer(0)
+  console.log('[Main] Double press -> Direct Exit')
+  // Using 0 as it's the standard for direct exit without confirmation in most SDK versions
+  await bridge.shutDownPageContainer(0)
 }
 
 main().catch(async (err) => {
-  console.error('Errore fatale:', err)
-  try { await display?.update(display.buildError('Errore di avvio')) }
-  catch {}
+  console.error('[Main] Fatal error:', err)
+  if (display) {
+    try {
+      currentScreen = 'error'
+      await display.update(display.buildError('Avvio fallito: ' + (err instanceof Error ? err.message : 'Unknown')))
+    } catch (dispErr) {
+      console.error('[Main] Could not display error on glasses:', dispErr)
+    }
+  }
 })

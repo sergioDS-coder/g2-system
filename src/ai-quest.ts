@@ -26,6 +26,7 @@ function buildDailyQuest(data: AIQuestData, level: number, dateStr: string, idx:
     completed: false,
     date: dateStr,
     jollyName: data.name,
+    icon: data.type === 'mental' ? 'book' : 'run',
   }
 }
 
@@ -35,14 +36,23 @@ export async function generateDailyQuestsAI(
   language: string,
   count: number
 ): Promise<DailyQuest[] | null> {
+  console.log('[AI] Generating daily quests...')
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 8000)
+
   try {
     const response = await fetch(FUNCTION_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ level, language, count, mode: 'daily' }),
+      signal: controller.signal
     })
 
-    if (!response.ok) return null
+    clearTimeout(timeoutId)
+    if (!response.ok) {
+      console.error('[AI] Netlify function returned error:', response.status)
+      return null
+    }
 
     const data = await response.json()
     if (!data.quests || !Array.isArray(data.quests)) return null
@@ -87,6 +97,7 @@ export async function generateJollyQuest(
       completed: false,
       date: dateStr,
       jollyName: data.name,
+      icon: 'sword',
     }
   } catch (err) {
     console.error('Errore quest jolly:', err)

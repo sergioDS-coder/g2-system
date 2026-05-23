@@ -9,6 +9,7 @@ export const FIXED_QUESTS = [
         unit: 'steps',
         expBase: 50,
         variants: [5000],
+        icon: 'walking',
     },
     {
         id: 'fixed_sonno',
@@ -18,6 +19,7 @@ export const FIXED_QUESTS = [
         unit: 'h',
         expBase: 80,
         variants: [7],
+        icon: 'sleep',
     },
 ];
 // Quest fitness random
@@ -30,6 +32,7 @@ export const FITNESS_QUESTS = [
         unit: 'km',
         expBase: 100,
         variants: [1, 2, 3, 5],
+        icon: 'run',
     },
     {
         id: 'flessioni',
@@ -39,6 +42,7 @@ export const FITNESS_QUESTS = [
         unit: 'reps',
         expBase: 50,
         variants: [10, 20, 30, 50],
+        icon: 'pushup',
     },
     {
         id: 'addominali',
@@ -48,6 +52,7 @@ export const FITNESS_QUESTS = [
         unit: 'reps',
         expBase: 50,
         variants: [15, 30, 50],
+        icon: 'pushup',
     },
     {
         id: 'plank',
@@ -57,6 +62,7 @@ export const FITNESS_QUESTS = [
         unit: 'min',
         expBase: 60,
         variants: [1, 2, 3],
+        icon: 'pushup',
     },
     {
         id: 'yoga',
@@ -66,6 +72,7 @@ export const FITNESS_QUESTS = [
         unit: 'min',
         expBase: 80,
         variants: [10, 20, 30],
+        icon: 'meditate',
     },
     {
         id: 'scale',
@@ -75,6 +82,7 @@ export const FITNESS_QUESTS = [
         unit: 'floors',
         expBase: 70,
         variants: [5, 10, 20],
+        icon: 'run',
     },
 ];
 // Quest mentali
@@ -87,6 +95,7 @@ export const MENTAL_QUESTS = [
         unit: 'min',
         expBase: 100,
         variants: [10, 15, 20, 30],
+        icon: 'meditate',
     },
     {
         id: 'lettura',
@@ -96,6 +105,7 @@ export const MENTAL_QUESTS = [
         unit: 'pages',
         expBase: 80,
         variants: [10, 20, 30, 50],
+        icon: 'book',
     },
     {
         id: 'studio',
@@ -105,6 +115,7 @@ export const MENTAL_QUESTS = [
         unit: 'min',
         expBase: 100,
         variants: [30, 60, 90],
+        icon: 'book',
     },
     {
         id: 'scrittura',
@@ -114,6 +125,7 @@ export const MENTAL_QUESTS = [
         unit: 'min',
         expBase: 70,
         variants: [15, 30],
+        icon: 'book',
     },
     {
         id: 'noscreen',
@@ -123,6 +135,7 @@ export const MENTAL_QUESTS = [
         unit: 'h',
         expBase: 90,
         variants: [1, 2],
+        icon: 'meditate',
     },
 ];
 function pickVariantForLevel(template, level) {
@@ -145,6 +158,7 @@ function generateQuestFromTemplate(t, level, dateStr, idx) {
         expReward: Math.round(t.expBase * expMultiplier),
         completed: false,
         date: dateStr,
+        icon: t.icon,
     };
 }
 function shuffle(arr) {

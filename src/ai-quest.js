@@ -13,18 +13,26 @@ function buildDailyQuest(data, level, dateStr, idx) {
         completed: false,
         date: dateStr,
         jollyName: data.name,
+        icon: data.type === 'mental' ? 'book' : 'run',
     };
 }
 // Genera tutte le quest giornaliere via Gemini
 export async function generateDailyQuestsAI(level, language, count) {
+    console.log('[AI] Generating daily quests...');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
         const response = await fetch(FUNCTION_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ level, language, count, mode: 'daily' }),
+            signal: controller.signal
         });
-        if (!response.ok)
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+            console.error('[AI] Netlify function returned error:', response.status);
             return null;
+        }
         const data = await response.json();
         if (!data.quests || !Array.isArray(data.quests))
             return null;
@@ -64,6 +72,7 @@ export async function generateJollyQuest(level, language) {
             completed: false,
             date: dateStr,
             jollyName: data.name,
+            icon: 'sword',
         };
     }
     catch (err) {
