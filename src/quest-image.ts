@@ -1,10 +1,9 @@
-// quest-image.ts — Canvas illustrations for G2 image containers
-// Two stacked containers: 180×144 top + 180×144 bottom = 180×288 total
+// quest-image.ts — Filled silhouette illustrations for G2 image containers
+// Canvas: 180×288 total (two stacked 180×144 containers)
 
 export const IMG_W = 180
-export const IMG_H = 144  // height of each container (2 stacked = 288 total)
+export const IMG_H = 144
 
-/** Returns [topBase64PNG, bottomBase64PNG] for the two image containers */
 export function renderQuestImages(templateId: string): [string, string] {
   const canvas = document.createElement('canvas')
   canvas.width = IMG_W
@@ -13,10 +12,7 @@ export function renderQuestImages(templateId: string): [string, string] {
 
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
-  ctx.strokeStyle = '#fff'
   ctx.fillStyle = '#fff'
-  ctx.lineCap = 'round'
-  ctx.lineJoin = 'round'
 
   const drawFn = ILLUSTRATIONS[templateId] ?? drawDefault
   drawFn(ctx, IMG_W, IMG_H * 2)
@@ -29,564 +25,340 @@ export function renderQuestImages(templateId: string): [string, string] {
 
 function cropToDataURL(src: HTMLCanvasElement, x: number, y: number, w: number, h: number): string {
   const c = document.createElement('canvas')
-  c.width = w
-  c.height = h
+  c.width = w; c.height = h
   c.getContext('2d')!.drawImage(src, x, y, w, h, 0, 0, w, h)
-  // The SDK calls atob() directly on the string, so strip the data-URL prefix
-  // ("data:image/png;base64,") and return only the raw base64 payload.
   return c.toDataURL('image/png').split(',')[1]
 }
 
-// ── Drawing helpers ────────────────────────────────────────────────────────────
+// ── Silhouette primitives ──────────────────────────────────────────────────────
 
-function circle(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+function head(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
   ctx.beginPath()
   ctx.arc(x, y, r, 0, Math.PI * 2)
   ctx.fill()
 }
 
-function line(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {
+/** Filled capsule (pill) between two points — the core limb primitive */
+function capsule(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number, r: number) {
+  const a = Math.atan2(y2 - y1, x2 - x1)
   ctx.beginPath()
-  ctx.moveTo(x1, y1)
-  ctx.lineTo(x2, y2)
-  ctx.stroke()
+  ctx.arc(x1, y1, r, a + Math.PI / 2, a - Math.PI / 2, true)
+  ctx.arc(x2, y2, r, a - Math.PI / 2, a + Math.PI / 2, true)
+  ctx.closePath()
+  ctx.fill()
 }
 
-function lines(ctx: CanvasRenderingContext2D, pts: [number, number][]) {
-  if (pts.length < 2) return
+function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath()
-  ctx.moveTo(pts[0][0], pts[0][1])
-  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1])
-  ctx.stroke()
-}
-
-function rect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, lw = 4) {
-  ctx.lineWidth = lw
-  ctx.strokeRect(x, y, w, h)
+  ctx.roundRect(x, y, w, h, r)
+  ctx.fill()
 }
 
 // ── Illustrations ──────────────────────────────────────────────────────────────
 
-function drawRunning(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.58, cy = h * 0.30
-
-  // Head
-  ctx.lineWidth = 5
-  circle(ctx, cx, cy, 18)
-
-  // Torso leaning forward
-  ctx.lineWidth = 8
-  lines(ctx, [[cx, cy + 18], [cx - 18, cy + 65]])
-
-  // Back arm (up-right)
-  ctx.lineWidth = 6
-  lines(ctx, [[cx - 5, cy + 35], [cx + 32, cy + 20]])
-
-  // Front arm (down-left)
-  lines(ctx, [[cx - 5, cy + 35], [cx - 38, cy + 55]])
-
-  // Lead leg (extended forward and down)
-  ctx.lineWidth = 7
-  lines(ctx, [[cx - 18, cy + 65], [cx + 18, cy + 120], [cx + 38, cy + 175]])
-
-  // Trailing leg (back and up)
-  lines(ctx, [[cx - 18, cy + 65], [cx - 46, cy + 110], [cx - 60, cy + 70]])
-
-  // Speed lines
-  ctx.lineWidth = 3
-  for (let i = 0; i < 4; i++) {
-    ctx.globalAlpha = 0.65 - i * 0.13
-    const ly = cy + 20 + i * 25
-    line(ctx, 8, ly, 8 + 50 - i * 8, ly)
-  }
-  ctx.globalAlpha = 1
+function drawRunning(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  const cx = 108, top = 38
+  // head
+  head(ctx, cx, top + 22, 22)
+  // torso (leaning forward)
+  capsule(ctx, cx, top + 44, cx - 20, top + 118, 14)
+  // arms
+  capsule(ctx, cx - 6, top + 74, cx + 46, top + 46, 9)   // back arm (up-right)
+  capsule(ctx, cx - 6, top + 74, cx - 46, top + 100, 9)  // front arm (down-left)
+  // front leg
+  capsule(ctx, cx - 20, top + 118, cx + 22, top + 190, 11)
+  capsule(ctx, cx + 22, top + 190, cx + 36, top + 250, 10)
+  // rear leg (kick up)
+  capsule(ctx, cx - 20, top + 118, cx - 52, top + 174, 11)
+  capsule(ctx, cx - 52, top + 174, cx - 65, top + 130, 9)
 }
 
-function drawPushup(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.5, cy = h * 0.45
-
-  // Head
-  ctx.lineWidth = 5
-  circle(ctx, cx + 52, cy - 42, 16)
-
-  // Body (angled 20°)
-  ctx.lineWidth = 8
-  lines(ctx, [[cx + 52, cy - 26], [cx - 52, cy + 10]])
-
-  // Right arm (bent, near head)
-  ctx.lineWidth = 6
-  lines(ctx, [[cx + 38, cy - 20], [cx + 30, cy + 22]])
-
-  // Left arm (straight)
-  lines(ctx, [[cx + 10, cy - 5], [cx, cy + 38]])
-
-  // Legs
-  ctx.lineWidth = 7
-  lines(ctx, [[cx - 52, cy + 10], [cx - 68, cy + 56], [cx - 72, cy + 95]])
-  lines(ctx, [[cx - 52, cy + 10], [cx - 38, cy + 62], [cx - 32, cy + 100]])
-
-  // Ground line
-  ctx.lineWidth = 3
-  ctx.globalAlpha = 0.4
-  line(ctx, 5, cy + 100, w - 5, cy + 100)
-  ctx.globalAlpha = 1
+function drawWalking(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  const cx = 90, top = 28
+  // head
+  head(ctx, cx, top + 22, 22)
+  // torso (upright)
+  capsule(ctx, cx, top + 44, cx, top + 122, 13)
+  // arms (one forward, one back)
+  capsule(ctx, cx, top + 68, cx + 36, top + 46, 9)
+  capsule(ctx, cx, top + 68, cx - 36, top + 90, 9)
+  // front leg
+  capsule(ctx, cx, top + 122, cx + 24, top + 198, 11)
+  capsule(ctx, cx + 24, top + 198, cx + 28, top + 258, 10)
+  // back leg
+  capsule(ctx, cx, top + 122, cx - 18, top + 196, 11)
+  capsule(ctx, cx - 18, top + 196, cx - 10, top + 258, 10)
 }
 
-function drawCrunches(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.5, cy = h * 0.55
-
-  // Head (raised)
-  ctx.lineWidth = 5
-  circle(ctx, cx - 48, cy - 50, 16)
-
-  // Torso (angled up)
-  ctx.lineWidth = 8
-  lines(ctx, [[cx - 48, cy - 34], [cx + 20, cy - 8]])
-
-  // Arms reaching forward
-  ctx.lineWidth = 5
-  lines(ctx, [[cx - 20, cy - 25], [cx + 42, cy - 45]])
-  lines(ctx, [[cx - 20, cy - 25], [cx + 42, cy - 15]])
-
-  // Hips
-  ctx.lineWidth = 7
-  // Left leg (bent, knee up)
-  lines(ctx, [[cx + 20, cy - 8], [cx + 55, cy + 28], [cx + 25, cy + 72]])
-  // Right leg (bent)
-  lines(ctx, [[cx + 20, cy - 8], [cx + 65, cy + 15], [cx + 35, cy + 65]])
-
-  // Ground line
-  ctx.lineWidth = 3
-  ctx.globalAlpha = 0.4
-  line(ctx, 5, cy + 72, w - 5, cy + 72)
-  ctx.globalAlpha = 1
+function drawPushup(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  const cy = 138
+  // head
+  head(ctx, 148, cy - 50, 20)
+  // torso (angled down-left)
+  capsule(ctx, 148, cy - 30, 36, cy + 10, 13)
+  // right arm (bent, near head)
+  capsule(ctx, 132, cy - 22, 124, cy + 30, 9)
+  // left arm (straight)
+  capsule(ctx, 84, cy - 5, 76, cy + 40, 9)
+  // legs (two close together)
+  capsule(ctx, 36, cy + 10, 18, cy + 65, 11)
+  capsule(ctx, 18, cy + 65, 16, cy + 108, 10)
+  capsule(ctx, 52, cy + 6, 36, cy + 60, 11)
+  capsule(ctx, 36, cy + 60, 34, cy + 104, 10)
 }
 
-function drawPlank(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cy = h * 0.50
-
-  // Head
-  ctx.lineWidth = 5
-  circle(ctx, w - 25, cy - 36, 16)
-
-  // Horizontal body
-  ctx.lineWidth = 9
-  lines(ctx, [[w - 25, cy - 20], [20, cy + 8]])
-
-  // Arms (straight, under body near head)
-  ctx.lineWidth = 6
-  lines(ctx, [[w - 40, cy - 10], [w - 52, cy + 38]])
-  lines(ctx, [[w - 62, cy - 5], [w - 72, cy + 42]])
-
-  // Legs (horizontal)
-  ctx.lineWidth = 7
-  lines(ctx, [[20, cy + 8], [12, cy + 55]])
-  lines(ctx, [[35, cy + 5], [28, cy + 52]])
-
-  // Ground line
-  ctx.lineWidth = 3
-  ctx.globalAlpha = 0.4
-  line(ctx, 5, cy + 56, w - 5, cy + 56)
-  ctx.globalAlpha = 1
-
-  // Timer dots (left side)
-  ctx.globalAlpha = 0.7
-  for (let i = 0; i < 5; i++) {
-    ctx.lineWidth = 0
-    circle(ctx, 12, cy - 100 + i * 22, 4 - i * 0.4)
-    ctx.globalAlpha -= 0.12
-  }
-  ctx.globalAlpha = 1
+function drawCrunches(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  const cy = 165
+  // head (raised, upper-left)
+  head(ctx, 30, cy - 55, 19)
+  // torso (angled up-left)
+  capsule(ctx, 30, cy - 36, 95, cy - 8, 12)
+  // arms reaching forward
+  capsule(ctx, 58, cy - 24, 112, cy - 42, 8)
+  capsule(ctx, 58, cy - 24, 112, cy - 10, 8)
+  // hips + bent knees
+  capsule(ctx, 95, cy - 8, 142, cy + 32, 12)
+  capsule(ctx, 142, cy + 32, 112, cy + 80, 10)
+  capsule(ctx, 95, cy - 8, 150, cy + 18, 12)
+  capsule(ctx, 150, cy + 18, 124, cy + 68, 10)
+  // lower spine to ground
+  capsule(ctx, 30, cy - 36, 16, cy + 28, 10)
 }
 
-function drawYoga(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.5, cy = h * 0.42
+function drawPlank(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  const cy = 158
+  // head
+  head(ctx, 158, cy - 44, 20)
+  // body (horizontal)
+  capsule(ctx, 158, cy - 24, 20, cy + 8, 13)
+  // arms (straight down)
+  capsule(ctx, 140, cy - 16, 132, cy + 38, 9)
+  capsule(ctx, 108, cy - 6, 100, cy + 44, 9)
+  // feet
+  capsule(ctx, 20, cy + 8, 16, cy + 54, 10)
+  capsule(ctx, 36, cy + 5, 32, cy + 50, 10)
+}
 
-  // Aura rings
-  ctx.lineWidth = 1.5
-  for (let r = 55; r <= 100; r += 15) {
-    ctx.globalAlpha = 0.15
+function drawYoga(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  const cx = 90, cy = 155
+  // subtle aura rings
+  for (let r = 82; r >= 46; r -= 18) {
+    ctx.globalAlpha = 0.09
     ctx.beginPath()
-    ctx.arc(cx, cy + 30, r, 0, Math.PI * 2)
-    ctx.stroke()
+    ctx.arc(cx, cy + 8, r, 0, Math.PI * 2)
+    ctx.fill()
   }
   ctx.globalAlpha = 1
-
-  // Head
-  ctx.lineWidth = 5
-  circle(ctx, cx, cy - 45, 18)
-
-  // Torso straight
-  ctx.lineWidth = 8
-  lines(ctx, [[cx, cy - 27], [cx, cy + 10]])
-
-  // Arms out to sides (hands on knees)
-  ctx.lineWidth = 5
-  lines(ctx, [[cx, cy - 15], [cx - 42, cy + 10], [cx - 52, cy + 42]])
-  lines(ctx, [[cx, cy - 15], [cx + 42, cy + 10], [cx + 52, cy + 42]])
-
-  // Legs crossed (lotus)
-  ctx.lineWidth = 6
-  lines(ctx, [[cx, cy + 10], [cx - 42, cy + 48], [cx + 10, cy + 70]])
-  lines(ctx, [[cx, cy + 10], [cx + 42, cy + 48], [cx - 10, cy + 70]])
-
-  // Rays from head
-  ctx.lineWidth = 2.5
-  const rays = [[-50, -28], [50, -28], [-60, 0], [60, 0], [-40, 25], [40, 25]]
-  rays.forEach(([dx, dy], i) => {
-    ctx.globalAlpha = 0.5 - i * 0.06
-    line(ctx, cx + dx * 0.6, cy - 45 + dy * 0.6, cx + dx, cy - 45 + dy)
-  })
-  ctx.globalAlpha = 1
+  // head
+  head(ctx, cx, cy - 90, 22)
+  // torso (straight)
+  capsule(ctx, cx, cy - 68, cx, cy - 24, 13)
+  // arms out (hands resting on knees)
+  capsule(ctx, cx, cy - 46, cx - 55, cy - 20, 9)
+  capsule(ctx, cx - 55, cy - 20, cx - 62, cy + 10, 8)
+  capsule(ctx, cx, cy - 46, cx + 55, cy - 20, 9)
+  capsule(ctx, cx + 55, cy - 20, cx + 62, cy + 10, 8)
+  // lotus legs (crossed)
+  capsule(ctx, cx, cy - 24, cx - 48, cy + 16, 11)
+  capsule(ctx, cx - 48, cy + 16, cx + 14, cy + 40, 10)
+  capsule(ctx, cx, cy - 24, cx + 48, cy + 16, 11)
+  capsule(ctx, cx + 48, cy + 16, cx - 14, cy + 40, 10)
 }
 
-function drawStairs(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  // Staircase (4 steps going up-right)
-  ctx.lineWidth = 5
-  const steps: [number, number][] = [
-    [12, h - 30],
-    [12, h - 80],
-    [50, h - 80],
-    [50, h - 130],
-    [88, h - 130],
-    [88, h - 180],
-    [126, h - 180],
-    [126, h - 230],
-    [w - 14, h - 230],
-  ]
-  ctx.globalAlpha = 0.6
-  lines(ctx, steps)
-  // Vertical fills
-  ctx.globalAlpha = 0.25
-  line(ctx, 50, h - 80, 50, h - 30)
-  line(ctx, 88, h - 130, 88, h - 80)
-  line(ctx, 126, h - 180, 126, h - 130)
-  ctx.globalAlpha = 1
-
-  // Running figure on stairs
-  const fx = 95, fy = h - 240
-  ctx.lineWidth = 5
-  circle(ctx, fx, fy, 14)
-
-  ctx.lineWidth = 6
-  lines(ctx, [[fx, fy + 14], [fx - 12, fy + 50]])
-  lines(ctx, [[fx - 4, fy + 28], [fx + 20, fy + 15]])
-  lines(ctx, [[fx - 4, fy + 28], [fx - 26, fy + 42]])
-  lines(ctx, [[fx - 12, fy + 50], [fx + 10, fy + 82], [fx + 22, fy + 115]])
-  lines(ctx, [[fx - 12, fy + 50], [fx - 30, fy + 80], [fx - 38, fy + 55]])
-}
-
-function drawWalking(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.55, cy = h * 0.28
-
-  // Head
-  ctx.lineWidth = 5
-  circle(ctx, cx, cy, 18)
-
-  // Torso (upright)
-  ctx.lineWidth = 8
-  lines(ctx, [[cx, cy + 18], [cx, cy + 68]])
-
-  // Arms (one forward, one back)
-  ctx.lineWidth = 6
-  lines(ctx, [[cx, cy + 32], [cx + 30, cy + 16]])
-  lines(ctx, [[cx, cy + 32], [cx - 30, cy + 52]])
-
-  // Legs
-  ctx.lineWidth = 7
-  // Front leg (extended forward)
-  lines(ctx, [[cx, cy + 68], [cx + 22, cy + 118], [cx + 30, cy + 168]])
-  // Back leg (slightly behind)
-  lines(ctx, [[cx, cy + 68], [cx - 18, cy + 118], [cx - 10, cy + 168]])
-
-  // Footstep dots behind
-  const dotY = cy + 172
-  ctx.lineWidth = 0
-  const dotAlphas = [0.6, 0.45, 0.32, 0.2, 0.12]
-  dotAlphas.forEach((a, i) => {
-    ctx.globalAlpha = a
-    circle(ctx, cx - 28 - i * 22, dotY, 5 - i * 0.5)
-    circle(ctx, cx - 40 - i * 22, dotY + 10, 4 - i * 0.4)
-  })
-  ctx.globalAlpha = 1
-}
-
-function drawMeditation(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.5, cy = h * 0.40
-
-  // Concentric aura rings
-  ctx.lineWidth = 1.5
-  for (let r = 50; r <= 95; r += 15) {
-    ctx.globalAlpha = 0.18
-    ctx.beginPath()
-    ctx.arc(cx, cy + 25, r, 0, Math.PI * 2)
-    ctx.stroke()
-  }
-  ctx.globalAlpha = 1
-
-  // Head with glow
-  ctx.lineWidth = 5
-  circle(ctx, cx, cy - 42, 18)
-
-  // Torso
-  ctx.lineWidth = 8
-  lines(ctx, [[cx, cy - 24], [cx, cy + 12]])
-
-  // Arms relaxed down-out
-  ctx.lineWidth = 5
-  lines(ctx, [[cx, cy - 10], [cx - 38, cy + 8], [cx - 48, cy + 38]])
-  lines(ctx, [[cx, cy - 10], [cx + 38, cy + 8], [cx + 48, cy + 38]])
-
-  // Crossed legs
-  ctx.lineWidth = 6
-  lines(ctx, [[cx, cy + 12], [cx - 40, cy + 50], [cx + 12, cy + 68]])
-  lines(ctx, [[cx, cy + 12], [cx + 40, cy + 50], [cx - 12, cy + 68]])
-
-  // Rays from head (6 directions)
-  ctx.lineWidth = 2.5
-  const angles = [-70, -50, -30, 210, 230, 250]
-  angles.forEach((a, i) => {
-    const rad = (a * Math.PI) / 180
-    ctx.globalAlpha = 0.55 - i * 0.04
-    line(ctx,
-      cx + Math.cos(rad) * 22,
-      cy - 42 + Math.sin(rad) * 22,
-      cx + Math.cos(rad) * 50,
-      cy - 42 + Math.sin(rad) * 50,
-    )
-  })
-  ctx.globalAlpha = 1
-}
-
-function drawBook(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.5, cy = h * 0.48
-  const bw = 68, bh = 85  // half-book dimensions
-
-  // Left page
-  ctx.lineWidth = 4
-  ctx.beginPath()
-  ctx.moveTo(cx, cy - bh)
-  ctx.lineTo(cx - bw, cy - bh + 8)
-  ctx.lineTo(cx - bw, cy + bh - 8)
-  ctx.lineTo(cx, cy + bh)
-  ctx.closePath()
-  ctx.globalAlpha = 0.12
-  ctx.fill()
-  ctx.globalAlpha = 1
-  ctx.stroke()
-
-  // Right page
-  ctx.beginPath()
-  ctx.moveTo(cx, cy - bh)
-  ctx.lineTo(cx + bw, cy - bh + 8)
-  ctx.lineTo(cx + bw, cy + bh - 8)
-  ctx.lineTo(cx, cy + bh)
-  ctx.closePath()
-  ctx.globalAlpha = 0.12
-  ctx.fill()
-  ctx.globalAlpha = 1
-  ctx.stroke()
-
-  // Spine
-  ctx.lineWidth = 3
-  line(ctx, cx, cy - bh, cx, cy + bh)
-
-  // Text lines on left page
-  ctx.lineWidth = 2.5
-  for (let i = 0; i < 5; i++) {
-    const ly = cy - 55 + i * 24
-    const lx1 = cx - bw + 10
-    ctx.globalAlpha = 0.7 - i * 0.08
-    line(ctx, lx1, ly, cx - 12, ly + 2)
-  }
-
-  // Text lines on right page
-  for (let i = 0; i < 5; i++) {
-    const ly = cy - 55 + i * 24
-    const lx2 = cx + bw - 10
-    ctx.globalAlpha = 0.7 - i * 0.08
-    line(ctx, cx + 12, ly + 2, lx2, ly)
-  }
-  ctx.globalAlpha = 1
-}
-
-function drawStudy(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.5, cy = h * 0.45
-
-  // Brain outline
-  ctx.lineWidth = 4
-  ctx.beginPath()
-  ctx.ellipse(cx, cy, 58, 65, 0, 0, Math.PI * 2)
-  ctx.globalAlpha = 0.08
-  ctx.fill()
-  ctx.globalAlpha = 1
-  ctx.stroke()
-
-  // Brain lobe divisions
-  ctx.lineWidth = 2.5
-  ctx.globalAlpha = 0.5
-  ctx.beginPath()
-  ctx.moveTo(cx, cy - 65)
-  ctx.bezierCurveTo(cx + 20, cy - 40, cx + 20, cy + 40, cx, cy + 65)
-  ctx.stroke()
-
-  ctx.beginPath()
-  ctx.moveTo(cx - 58, cy)
-  ctx.bezierCurveTo(cx - 30, cy - 20, cx + 30, cy - 20, cx + 58, cy)
-  ctx.stroke()
-  ctx.globalAlpha = 1
-
-  // Neural nodes
-  const nodes: [number, number][] = [
-    [cx, cy - 40], [cx - 35, cy - 25], [cx + 35, cy - 25],
-    [cx - 42, cy + 10], [cx + 42, cy + 10],
-    [cx - 25, cy + 38], [cx + 25, cy + 38], [cx, cy + 48],
-  ]
-  ctx.lineWidth = 2
-  ctx.globalAlpha = 0.5
-  // Connections
-  const edges = [[0,1],[0,2],[1,3],[2,4],[1,5],[2,6],[3,5],[4,6],[5,7],[6,7],[0,7]]
-  edges.forEach(([a, b]) => {
-    line(ctx, nodes[a][0], nodes[a][1], nodes[b][0], nodes[b][1])
-  })
-  ctx.globalAlpha = 1
-
-  nodes.forEach(([nx, ny], i) => {
-    ctx.lineWidth = 0
-    circle(ctx, nx, ny, i === 0 ? 8 : 5)
-  })
-}
-
-function drawWriting(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const px = w * 0.72, py = h * 0.18  // pen tip
-
-  // Paper background
-  ctx.lineWidth = 3
-  ctx.globalAlpha = 0.1
-  ctx.fillRect(12, h * 0.35, w - 24, h * 0.55)
-  ctx.globalAlpha = 1
-  rect(ctx, 12, h * 0.35, w - 24, h * 0.55, 3)
-
-  // Pen/quill (diagonal)
-  ctx.lineWidth = 5
-  lines(ctx, [[px, py], [px - 80, py + 120], [px - 88, py + 138]])
-  // Pen body
-  ctx.lineWidth = 14
-  ctx.globalAlpha = 0.7
-  lines(ctx, [[px - 8, py + 12], [px - 68, py + 108]])
-  ctx.globalAlpha = 1
-
-  // Written lines on paper
-  ctx.lineWidth = 2.5
+function drawStairs(ctx: CanvasRenderingContext2D, _w: number, h: number) {
+  // staircase (4 steps, all right-edges aligned)
+  ctx.globalAlpha = 0.52
   for (let i = 0; i < 4; i++) {
-    const ly = h * 0.42 + i * 26
-    ctx.globalAlpha = 0.55 - i * 0.08
-    const maxX = i < 2 ? w - 22 : w * 0.6
-    line(ctx, 22, ly, maxX, ly)
+    const sx = 10 + i * 36
+    const sy = h - 32 - i * 56
+    rrect(ctx, sx, sy, h - 32 - sx, 13, 3)
   }
   ctx.globalAlpha = 1
+
+  // person climbing (compact, ~125px tall)
+  const fx = 40, fy = 74
+  head(ctx, fx, fy + 13, 15)
+  capsule(ctx, fx, fy + 28, fx - 3, fy + 72, 10)
+  capsule(ctx, fx - 2, fy + 42, fx + 26, fy + 26, 8)
+  capsule(ctx, fx - 2, fy + 42, fx - 26, fy + 58, 8)
+  capsule(ctx, fx - 3, fy + 72, fx + 18, fy + 108, 10)
+  capsule(ctx, fx + 18, fy + 108, fx + 22, fy + 140, 9)
+  capsule(ctx, fx - 3, fy + 72, fx - 22, fy + 106, 10)
+  capsule(ctx, fx - 22, fy + 106, fx - 16, fy + 140, 9)
 }
 
-function drawNoScreen(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.5, cy = h * 0.44
-  const mw = 130, mh = 85
-
-  // Monitor frame
-  ctx.lineWidth = 5
-  ctx.strokeRect(cx - mw / 2, cy - mh / 2, mw, mh)
-  ctx.globalAlpha = 0.08
-  ctx.fillRect(cx - mw / 2, cy - mh / 2, mw, mh)
+function drawMeditation(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  const cx = 90, cy = 158
+  // aura rings
+  for (let r = 84; r >= 48; r -= 18) {
+    ctx.globalAlpha = 0.09
+    ctx.beginPath()
+    ctx.arc(cx, cy + 10, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
   ctx.globalAlpha = 1
-
-  // Stand
-  ctx.lineWidth = 5
-  line(ctx, cx - 22, cy + mh / 2, cx + 22, cy + mh / 2)
-  line(ctx, cx, cy + mh / 2, cx, cy + mh / 2 + 30)
-  line(ctx, cx - 26, cy + mh / 2 + 30, cx + 26, cy + mh / 2 + 30)
-
-  // Big X across screen
-  ctx.lineWidth = 10
-  line(ctx, cx - mw / 2 + 15, cy - mh / 2 + 12, cx + mw / 2 - 15, cy + mh / 2 - 12)
-  line(ctx, cx + mw / 2 - 15, cy - mh / 2 + 12, cx - mw / 2 + 15, cy + mh / 2 - 12)
+  // head
+  head(ctx, cx, cy - 90, 22)
+  // torso
+  capsule(ctx, cx, cy - 68, cx, cy - 24, 13)
+  // arms relaxed down-out (palms on knees)
+  capsule(ctx, cx, cy - 46, cx - 50, cy - 12, 9)
+  capsule(ctx, cx - 50, cy - 12, cx - 58, cy + 18, 8)
+  capsule(ctx, cx, cy - 46, cx + 50, cy - 12, 9)
+  capsule(ctx, cx + 50, cy - 12, cx + 58, cy + 18, 8)
+  // lotus legs
+  capsule(ctx, cx, cy - 24, cx - 48, cy + 18, 11)
+  capsule(ctx, cx - 48, cy + 18, cx + 14, cy + 40, 10)
+  capsule(ctx, cx, cy - 24, cx + 48, cy + 18, 11)
+  capsule(ctx, cx + 48, cy + 18, cx - 14, cy + 40, 10)
 }
 
-function drawSleep(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w * 0.38, cy = h * 0.30
+function drawBook(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  const cx = 90, cy = 144
+  const bw = 72, bh = 96
 
-  // Moon crescent
-  ctx.lineWidth = 5
-  ctx.beginPath()
-  ctx.arc(cx, cy, 52, 0, Math.PI * 2)
-  ctx.globalAlpha = 0.08
-  ctx.fill()
-  ctx.globalAlpha = 1
-  ctx.stroke()
+  // left page
+  ctx.save()
+  ctx.translate(cx - bw / 2, cy - bh / 2)
+  ctx.rotate(-0.04)
+  rrect(ctx, 0, 0, bw, bh, 6)
+  ctx.restore()
 
-  // Inner circle (crescent cutout effect)
+  // right page
+  ctx.save()
+  ctx.translate(cx, cy - bh / 2)
+  ctx.rotate(0.04)
+  rrect(ctx, 0, 0, bw, bh, 6)
+  ctx.restore()
+
+  // spine strip (black)
   ctx.fillStyle = '#000'
-  ctx.beginPath()
-  ctx.arc(cx + 30, cy - 18, 42, 0, Math.PI * 2)
-  ctx.fill()
+  rrect(ctx, cx - 8, cy - bh / 2, 16, bh, 5)
   ctx.fillStyle = '#fff'
 
-  // Stars
-  const stars: [number, number, number][] = [
-    [w * 0.78, h * 0.08, 5],
-    [w * 0.88, h * 0.20, 3.5],
-    [w * 0.72, h * 0.28, 3],
-    [w * 0.92, h * 0.38, 2.5],
-  ]
-  stars.forEach(([sx, sy, sr]) => {
-    ctx.lineWidth = 0
-    circle(ctx, sx, sy, sr)
-  })
-
-  // Sleeping figure (horizontal)
-  const fy = h * 0.65
-  ctx.lineWidth = 5
-  circle(ctx, w * 0.22, fy - 16, 16)
-
-  ctx.lineWidth = 7
-  lines(ctx, [[w * 0.22, fy], [w * 0.80, fy + 5]])
-
-  ctx.lineWidth = 5
-  lines(ctx, [[w * 0.38, fy - 5], [w * 0.32, fy - 35]])
-  lines(ctx, [[w * 0.55, fy - 2], [w * 0.60, fy - 28]])
-
-  ctx.lineWidth = 6
-  lines(ctx, [[w * 0.80, fy + 5], [w * 0.75, fy + 45]])
-  lines(ctx, [[w * 0.68, fy + 4], [w * 0.64, fy + 42]])
-
-  // Zzz letters
-  ctx.lineWidth = 5
-  const zx = w * 0.60, zy = h * 0.38
-  // Z1
-  lines(ctx, [[zx, zy], [zx + 22, zy], [zx, zy + 22], [zx + 22, zy + 22]])
-  // Z2 (smaller)
-  ctx.lineWidth = 3.5
-  ctx.globalAlpha = 0.7
-  lines(ctx, [[zx + 26, zy - 12], [zx + 42, zy - 12], [zx + 26, zy + 4], [zx + 42, zy + 4]])
-  // Z3 (smallest)
-  ctx.lineWidth = 2.5
-  ctx.globalAlpha = 0.45
-  lines(ctx, [[zx + 46, zy - 22], [zx + 58, zy - 22], [zx + 46, zy - 10], [zx + 58, zy - 10]])
-  ctx.globalAlpha = 1
+  // text lines on pages (black = cutout effect)
+  ctx.fillStyle = '#000'
+  for (let i = 0; i < 5; i++) {
+    const ly = cy - bh / 2 + 18 + i * 18
+    ctx.fillRect(cx - bw + 10, ly, bw - 22, 6)
+    ctx.fillRect(cx + 10, ly + 2, bw - 22, 6)
+  }
+  ctx.fillStyle = '#fff'
 }
 
-function drawDefault(ctx: CanvasRenderingContext2D, w: number, h: number) {
-  const cx = w / 2, cy = h / 2
-  ctx.lineWidth = 5
+function drawStudy(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  const cx = 90
+  // large filled lightning bolt (knowledge/focus)
   ctx.beginPath()
-  ctx.arc(cx, cy, 50, 0, Math.PI * 2)
-  ctx.stroke()
-
-  ctx.lineWidth = 8
-  line(ctx, cx, cy - 28, cx, cy + 12)
-  ctx.lineWidth = 10
-  ctx.beginPath()
-  ctx.arc(cx, cy + 26, 4, 0, Math.PI * 2)
+  ctx.moveTo(cx + 28, 50)
+  ctx.lineTo(cx - 20, 152)
+  ctx.lineTo(cx + 10, 152)
+  ctx.lineTo(cx - 30, 258)
+  ctx.lineTo(cx + 20, 165)
+  ctx.lineTo(cx - 10, 165)
+  ctx.closePath()
   ctx.fill()
 }
+
+function drawWriting(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  // paper
+  ctx.globalAlpha = 0.2
+  rrect(ctx, 14, 92, 148, 168, 8)
+  ctx.globalAlpha = 1
+
+  // text lines (filled rectangles)
+  for (let i = 0; i < 5; i++) {
+    const lw = i === 3 ? 82 : 128
+    ctx.globalAlpha = 0.62 - i * 0.09
+    ctx.fillRect(24, 110 + i * 28, lw, 7)
+  }
+  ctx.globalAlpha = 1
+
+  // pencil (diagonal filled capsule, upper-right)
+  capsule(ctx, 152, 44, 74, 178, 11)
+
+  // pencil tip (dark point)
+  ctx.fillStyle = '#000'
+  capsule(ctx, 74, 178, 64, 198, 5)
+  ctx.fillStyle = '#fff'
+
+  // eraser cap (small circle at top)
+  head(ctx, 152, 44, 13)
+}
+
+function drawNoScreen(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
+  const cx = 90, cy = 118
+  const mw = 144, mh = 92
+
+  // monitor frame (white)
+  rrect(ctx, cx - mw / 2, cy - mh / 2, mw, mh, 8)
+  // screen (black cutout)
+  ctx.fillStyle = '#000'
+  rrect(ctx, cx - mw / 2 + 8, cy - mh / 2 + 8, mw - 16, mh - 16, 4)
+  ctx.fillStyle = '#fff'
+  // stand
+  rrect(ctx, cx - 22, cy + mh / 2, 44, 10, 4)
+  rrect(ctx, cx - 6, cy + mh / 2 + 10, 12, 30, 3)
+  rrect(ctx, cx - 30, cy + mh / 2 + 40, 60, 13, 5)
+
+  // X on screen (two diagonal capsules, white over black)
+  capsule(ctx, cx - 40, cy - 28, cx + 40, cy + 28, 10)
+  capsule(ctx, cx + 40, cy - 28, cx - 40, cy + 28, 10)
+}
+
+function drawSleep(ctx: CanvasRenderingContext2D, w: number, _h: number) {
+  // crescent moon
+  head(ctx, 50, 76, 54)
+  ctx.fillStyle = '#000'
+  head(ctx, 75, 55, 46)
+  ctx.fillStyle = '#fff'
+
+  // stars
+  for (const [sx, sy, sr] of [[145, 22, 8], [162, 58, 5], [128, 78, 4]] as [number,number,number][]) {
+    head(ctx, sx, sy, sr)
+  }
+
+  // sleeping figure (horizontal)
+  const fy = 198
+  head(ctx, 26, fy - 18, 18)
+  capsule(ctx, 26, fy, 148, fy + 8, 12)
+  // arm over body
+  capsule(ctx, 52, fy - 4, 46, fy - 34, 8)
+  // feet/legs
+  capsule(ctx, 148, fy + 8, 138, fy + 54, 10)
+  capsule(ctx, 124, fy + 7, 114, fy + 52, 10)
+
+  // Zzz (stroke-based, small)
+  ctx.strokeStyle = '#fff'
+  ctx.lineCap = 'round'
+  const drawZ = (zx: number, zy: number, s: number, alpha: number) => {
+    ctx.globalAlpha = alpha
+    ctx.lineWidth = Math.max(3, s * 0.28)
+    ctx.beginPath()
+    ctx.moveTo(zx, zy)
+    ctx.lineTo(zx + s, zy)
+    ctx.lineTo(zx, zy + s)
+    ctx.lineTo(zx + s, zy + s)
+    ctx.stroke()
+  }
+  drawZ(w * 0.58, 140, 20, 1)
+  drawZ(w * 0.72, 118, 15, 0.72)
+  drawZ(w * 0.84, 100, 11, 0.46)
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = '#000'
+}
+
+function drawDefault(ctx: CanvasRenderingContext2D, w: number, _h: number) {
+  const cx = w / 2
+  head(ctx, cx, 78, 28)
+  capsule(ctx, cx, 106, cx, 188, 16)
+  capsule(ctx, cx, 136, cx - 40, 114, 10)
+  capsule(ctx, cx, 136, cx + 40, 114, 10)
+  capsule(ctx, cx, 188, cx - 22, 258, 12)
+  capsule(ctx, cx, 188, cx + 22, 258, 12)
+}
+
+// ── Illustration map ───────────────────────────────────────────────────────────
 
 const ILLUSTRATIONS: Record<string, (ctx: CanvasRenderingContext2D, w: number, h: number) => void> = {
   corsa: drawRunning,
