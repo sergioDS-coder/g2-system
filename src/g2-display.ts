@@ -16,6 +16,26 @@ const PAD = 6
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
 export const VERSION = 'v1.4.0'
 
+function getQuestIcon(templateId: string): string[] {
+  // Each entry: 4 lines, each exactly 5 chars wide
+  const icons: Record<string, string[]> = {
+    corsa:           [' ○>  ', '/|   ', '/ \\  ', '     '],
+    flessioni:       ['  ○  ', ' /|  ', ' |\\  ', '     '],
+    addominali:      [' ○─┐ ', ' │/  ', ' /   ', '     '],
+    plank:           [' ○─┐ ', ' │─┘ ', '/    ', '     '],
+    yoga:            [' ○   ', '╱|╲  ', '╱ ╲  ', '     '],
+    scale:           ['   ┐ ', '  ─┤ ', '─┘   ', '     '],
+    fixed_camminata: [' ○   ', ' |>  ', '/ \\  ', '. .  '],
+    meditazione:     ['*○*  ', ' |   ', '/ \\  ', '     '],
+    lettura:         ['╱──╲ ', '│  │ ', '╲──╱ ', '     '],
+    studio:          ['╔══╗ ', '║▓▓║ ', '╚══╝ ', '     '],
+    scrittura:       ['   ╱ ', '  ╱─ ', ' ─── ', '     '],
+    noscreen:        ['┌─┐  ', '│X│  ', '└─┘  ', '─────'],
+    fixed_sonno:     [' ╭   ', '(  Zz', ' ╰   ', '     '],
+  }
+  return icons[templateId] ?? ['  ◈  ', '     ', '     ', '     ']
+}
+
 function truncate(text: string, maxLen: number): string {
   if (!text) return ''
   if (text.length <= maxLen) return text
@@ -232,16 +252,25 @@ export class G2Display {
     const attrKey = 'attr' + q.attribute.charAt(0).toUpperCase() + q.attribute.slice(1)
     const attr = (tr as any)[attrKey] ?? q.attribute.toUpperCase()
     const status = q.completed ? '● DONE' : '○ PENDING'
-    const jollyTag = q.type === 'jolly' ? '★ JOLLY ' : ''
+    const jollyTag = q.type === 'jolly' ? '★ ' : ''
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
 
+    const icon = getQuestIcon(q.templateId)
+    const typeName = q.type.toUpperCase()
+    // Right column: each line max 22 chars (5 icon + 1 separator + 22 = 28 total)
+    const info = [
+      ` ${q.amount}${q.unit}`,
+      ` ${attr}`,
+      ` +${q.expReward} EXP`,
+      ` ${status}`,
+    ]
+    const rows = icon.map((ln, i) => `${ln}│${info[i] ?? ''}`)
+
     return [
-      `== QUEST ==`,
+      `= ${jollyTag}${truncate(name.toUpperCase(), 22)} =`,
+      `  ── ${typeName} ──`,
       LINE,
-      `${jollyTag}${truncate(name.toUpperCase(), 26)}`,
-      `Target: ${q.amount} ${q.unit}`,
-      `Attr: ${attr}   EXP: +${q.expReward}`,
-      `Status: ${status}`,
+      ...rows,
       LINE,
       q.completed
         ? `${c(0)} Back to Quests`
