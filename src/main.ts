@@ -273,7 +273,7 @@ async function undoQuest() {
   }
 
   detailIdx = 0
-  await display.update(display.buildQuestDetail(quests[questIdx], detailIdx))
+  await display.showQuestDetail(quests[questIdx], detailIdx)
 }
 
 // ─── Gestione eventi ──────────────────────────────────────────────────────────
@@ -357,7 +357,7 @@ async function handleQuestListPress() {
     await goToProfile()
   } else {
     detailIdx = 0; currentScreen = 'questDetail'
-    await display.update(display.buildQuestDetail(quests[questIdx], detailIdx))
+    await display.showQuestDetail(quests[questIdx], detailIdx)
   }
 }
 
@@ -368,6 +368,10 @@ async function handleQuestDetailPress() {
   } else {
     if (detailIdx === 0) await completeQuest(); else await goToQuestList()
   }
+}
+
+async function refreshQuestDetail() {
+  await display.showQuestDetail(quests[questIdx], detailIdx)
 }
 
 async function handleLevelUpPress() {
@@ -407,7 +411,7 @@ async function handleSwipeUp() {
     case 'questList':
       if (questIdx > 0) { questIdx--; await refreshQuestList() } break
     case 'questDetail':
-      if (detailIdx > 0) { detailIdx--; await display.update(display.buildQuestDetail(quests[questIdx], detailIdx)) } break
+      if (detailIdx > 0) { detailIdx--; await display.showQuestDetail(quests[questIdx], detailIdx) } break
     case 'levelUp':
       levelIdx = Math.max(0, levelIdx - 1); await display.update(display.buildLevelUp(player!, pendingLevelUp?.oldLevel ?? player!.level - 1, levelIdx)); break
     case 'rankUp':
@@ -439,7 +443,7 @@ async function handleSwipeDown() {
     case 'questList':
       if (questIdx < quests.length + 1) { questIdx++; await refreshQuestList() } break
     case 'questDetail':
-      if (detailIdx < 1) { detailIdx++; await display.update(display.buildQuestDetail(quests[questIdx], detailIdx)) } break
+      if (detailIdx < 1) { detailIdx++; await display.showQuestDetail(quests[questIdx], detailIdx) } break
     case 'levelUp':
       levelIdx = Math.min(1, levelIdx + 1); await display.update(display.buildLevelUp(player!, pendingLevelUp?.oldLevel ?? player!.level - 1, levelIdx)); break
     case 'rankUp':

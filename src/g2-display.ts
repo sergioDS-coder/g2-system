@@ -1,5 +1,7 @@
 import {
   TextContainerProperty,
+  ImageContainerProperty,
+  ImageRawDataUpdate,
   CreateStartUpPageContainer,
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
@@ -9,32 +11,17 @@ import type { DailyQuest } from './quest-data'
 import type { RankingEntry } from './supabase-client'
 import type { Lang } from './i18n'
 import { t } from './i18n'
+import { renderQuestImages, IMG_W, IMG_H } from './quest-image'
 
 const W = 576
 const H = 288
 const PAD = 6
+const TEXT_X = IMG_W        // text container starts after image
+const TEXT_W = W - IMG_W    // 396px → ~19 chars per line
+const SHORT_LINE = '───────────────────'  // fits in narrow text container
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
 export const VERSION = 'v1.4.0'
 
-function getQuestIcon(templateId: string): string[] {
-  // Each entry: 4 lines, each exactly 5 chars wide
-  const icons: Record<string, string[]> = {
-    corsa:           [' ○>  ', '/|   ', '/ \\  ', '     '],
-    flessioni:       ['  ○  ', ' /|  ', ' |\\  ', '     '],
-    addominali:      [' ○─┐ ', ' │/  ', ' /   ', '     '],
-    plank:           [' ○─┐ ', ' │─┘ ', '/    ', '     '],
-    yoga:            [' ○   ', '╱|╲  ', '╱ ╲  ', '     '],
-    scale:           ['   ┐ ', '  ─┤ ', '─┘   ', '     '],
-    fixed_camminata: [' ○   ', ' |>  ', '/ \\  ', '. .  '],
-    meditazione:     ['*○*  ', ' |   ', '/ \\  ', '     '],
-    lettura:         ['╱──╲ ', '│  │ ', '╲──╱ ', '     '],
-    studio:          ['╔══╗ ', '║▓▓║ ', '╚══╝ ', '     '],
-    scrittura:       ['   ╱ ', '  ╱─ ', ' ─── ', '     '],
-    noscreen:        ['┌─┐  ', '│X│  ', '└─┘  ', '─────'],
-    fixed_sonno:     [' ╭   ', '(  Zz', ' ╰   ', '     '],
-  }
-  return icons[templateId] ?? ['  ◈  ', '     ', '     ', '     ']
-}
 
 function truncate(text: string, maxLen: number): string {
   if (!text) return ''
@@ -51,6 +38,8 @@ export class G2Display {
   private initialized = false
   private lastContent = ''
   private lang: Lang = 'it'
+  private inImageMode = false
+  private lastImageTemplateId: string | null = null
 
   constructor(bridge: EvenAppBridge) {
     this.bridge = bridge
@@ -78,7 +67,15 @@ export class G2Display {
   async update(content: string): Promise<void> {
     if (!this.initialized || content === this.lastContent) return
     this.lastContent = content
-    
+
+    // If coming out of image mode, must rebuild with full-width text container
+    if (this.inImageMode) {
+      this.inImageMode = false
+      this.lastImageTemplateId = null
+      await this._rebuildFullWidth(content)
+      return
+    }
+
     // textContainerUpgrade expects 1 argument (an object) in SDK 0.0.10
     try {
       await (this.bridge as any).textContainerUpgrade({
@@ -89,15 +86,78 @@ export class G2Display {
         contentLength: content.length
       })
     } catch (e) {
-      // Fallback if the object structure is different or method fails
       console.error('Update failed, rebuilding page', e)
-      const container = new TextContainerProperty({
-        xPosition: 0, yPosition: 0, width: W, height: H,
-        borderWidth: 0, borderColor: 5, paddingLength: PAD,
-        containerID: 1, containerName: 'main', content, isEventCapture: 1,
-      })
-      await (this.bridge as any).rebuildPageContainer({ containerTotalNum: 1, textObject: [container] })
+      await this._rebuildFullWidth(content)
     }
+  }
+
+  /** Show quest detail with real image on the left (180×288) + text on the right */
+  async showQuestDetail(q: DailyQuest, selectedIdx = 0): Promise<void> {
+    if (!this.initialized) return
+    const content = this.buildQuestDetailNarrow(q, selectedIdx)
+
+    if (!this.inImageMode) {
+      // Enter image mode: rebuild with 2 image containers + 1 narrow text container
+      this.inImageMode = true
+      this.lastContent = content
+      await this._rebuildWithImages(content)
+      await this._sendQuestImages(q.templateId)
+      this.lastImageTemplateId = q.templateId
+    } else {
+      // Already in image mode: only update text if changed
+      if (content !== this.lastContent) {
+        this.lastContent = content
+        try {
+          await (this.bridge as any).textContainerUpgrade({
+            containerID: 1, containerName: 'main',
+            content, contentOffset: 0, contentLength: content.length
+          })
+        } catch (e) {
+          await this._rebuildWithImages(content)
+        }
+      }
+      // Update image only if quest changed
+      if (this.lastImageTemplateId !== q.templateId) {
+        await this._sendQuestImages(q.templateId)
+        this.lastImageTemplateId = q.templateId
+      }
+    }
+  }
+
+  private async _rebuildFullWidth(content: string): Promise<void> {
+    const container = new TextContainerProperty({
+      xPosition: 0, yPosition: 0, width: W, height: H,
+      borderWidth: 0, borderColor: 5, paddingLength: PAD,
+      containerID: 1, containerName: 'main', content, isEventCapture: 1,
+    })
+    await (this.bridge as any).rebuildPageContainer({ containerTotalNum: 1, textObject: [container] })
+  }
+
+  private async _rebuildWithImages(content: string): Promise<void> {
+    const imgTop = new ImageContainerProperty({
+      xPosition: 0, yPosition: 0, width: IMG_W, height: IMG_H,
+      containerID: 2, containerName: 'img-top',
+    })
+    const imgBot = new ImageContainerProperty({
+      xPosition: 0, yPosition: IMG_H, width: IMG_W, height: IMG_H,
+      containerID: 3, containerName: 'img-bot',
+    })
+    const txt = new TextContainerProperty({
+      xPosition: TEXT_X, yPosition: 0, width: TEXT_W, height: H,
+      borderWidth: 0, borderColor: 5, paddingLength: PAD,
+      containerID: 1, containerName: 'main', content, isEventCapture: 1,
+    })
+    await (this.bridge as any).rebuildPageContainer({
+      containerTotalNum: 3,
+      imageObject: [imgTop, imgBot],
+      textObject: [txt],
+    })
+  }
+
+  private async _sendQuestImages(templateId: string): Promise<void> {
+    const [topData, botData] = renderQuestImages(templateId)
+    await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 2, containerName: 'img-top', imageData: topData }))
+    await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 3, containerName: 'img-bot', imageData: botData }))
   }
 
   buildBootScreen(): string {
@@ -246,31 +306,51 @@ export class G2Display {
     return lines.join('\n')
   }
 
+  /** Quest detail for narrow text container (right of image, ~19 chars/line) */
+  buildQuestDetailNarrow(q: DailyQuest, selectedIdx = 0): string {
+    const tr = t(this.lang)
+    const name = q.jollyName ?? ((tr as any)[q.nameKey] ?? q.nameKey)
+    const attrKey = 'attr' + q.attribute.charAt(0).toUpperCase() + q.attribute.slice(1)
+    const attr = (tr as any)[attrKey] ?? q.attribute.toUpperCase()
+    const jollyTag = q.type === 'jolly' ? '★ ' : ''
+    const typeName = q.type.toUpperCase()
+    const c = (i: number) => i === selectedIdx ? '▶' : ' '
+
+    return [
+      truncate(`${jollyTag}${name.toUpperCase()}`, 18),
+      `── ${typeName}`,
+      SHORT_LINE,
+      `${q.amount} ${q.unit}`,
+      attr,
+      `+${q.expReward} EXP`,
+      q.completed ? '● COMPLETATA' : '○ IN ATTESA',
+      SHORT_LINE,
+      q.completed
+        ? `${c(0)} Indietro`
+        : `${c(0)} Completa`,
+      q.completed ? '' : `${c(1)} Indietro`,
+      SHORT_LINE,
+      '▲/▼  [P]=Seleziona',
+    ].filter(l => l !== '').join('\n')
+  }
+
+  /** Legacy full-width quest detail (used as fallback if image mode fails) */
   buildQuestDetail(q: DailyQuest, selectedIdx = 0): string {
     const tr = t(this.lang)
     const name = q.jollyName ?? ((tr as any)[q.nameKey] ?? q.nameKey)
     const attrKey = 'attr' + q.attribute.charAt(0).toUpperCase() + q.attribute.slice(1)
     const attr = (tr as any)[attrKey] ?? q.attribute.toUpperCase()
     const status = q.completed ? '● DONE' : '○ PENDING'
-    const jollyTag = q.type === 'jolly' ? '★ ' : ''
+    const jollyTag = q.type === 'jolly' ? '★ JOLLY ' : ''
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
 
-    const icon = getQuestIcon(q.templateId)
-    const typeName = q.type.toUpperCase()
-    // Right column: each line max 22 chars (5 icon + 1 separator + 22 = 28 total)
-    const info = [
-      ` ${q.amount}${q.unit}`,
-      ` ${attr}`,
-      ` +${q.expReward} EXP`,
-      ` ${status}`,
-    ]
-    const rows = icon.map((ln, i) => `${ln}│${info[i] ?? ''}`)
-
     return [
-      `= ${jollyTag}${truncate(name.toUpperCase(), 22)} =`,
-      `  ── ${typeName} ──`,
+      `== QUEST ==`,
       LINE,
-      ...rows,
+      `${jollyTag}${truncate(name.toUpperCase(), 26)}`,
+      `Target: ${q.amount} ${q.unit}`,
+      `Attr: ${attr}   EXP: +${q.expReward}`,
+      `Status: ${status}`,
       LINE,
       q.completed
         ? `${c(0)} Back to Quests`
