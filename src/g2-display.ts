@@ -101,6 +101,8 @@ export class G2Display {
       this.inImageMode = true
       this.lastContent = content
       await this._rebuildWithImages(content)
+      // Let the container layout settle before pushing image bytes
+      await new Promise(r => setTimeout(r, 250))
       await this._sendQuestImages(q.templateId)
       this.lastImageTemplateId = q.templateId
     } else {

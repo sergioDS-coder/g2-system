@@ -32,7 +32,9 @@ function cropToDataURL(src: HTMLCanvasElement, x: number, y: number, w: number, 
   c.width = w
   c.height = h
   c.getContext('2d')!.drawImage(src, x, y, w, h, 0, 0, w, h)
-  return c.toDataURL('image/png')
+  // The SDK calls atob() directly on the string, so strip the data-URL prefix
+  // ("data:image/png;base64,") and return only the raw base64 payload.
+  return c.toDataURL('image/png').split(',')[1]
 }
 
 // ── Drawing helpers ────────────────────────────────────────────────────────────
