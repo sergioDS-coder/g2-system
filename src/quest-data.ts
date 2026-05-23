@@ -10,6 +10,7 @@ export interface QuestTemplate {
   unit: string  // 'km', 'reps', 'min', 'pages', 'h'
   expBase: number  // EXP per la versione base
   variants: number[]  // valori possibili (es. 10, 20, 30 flessioni)
+  icon: string
 }
 
 // Quest fisse sempre presenti
@@ -22,6 +23,7 @@ export const FIXED_QUESTS: QuestTemplate[] = [
     unit: 'steps',
     expBase: 50,
     variants: [5000],
+    icon: 'walking',
   },
   {
     id: 'fixed_sonno',
@@ -31,6 +33,7 @@ export const FIXED_QUESTS: QuestTemplate[] = [
     unit: 'h',
     expBase: 80,
     variants: [7],
+    icon: 'sleep',
   },
 ]
 
@@ -44,6 +47,7 @@ export const FITNESS_QUESTS: QuestTemplate[] = [
     unit: 'km',
     expBase: 100,
     variants: [1, 2, 3, 5],
+    icon: 'run',
   },
   {
     id: 'flessioni',
@@ -53,6 +57,7 @@ export const FITNESS_QUESTS: QuestTemplate[] = [
     unit: 'reps',
     expBase: 50,
     variants: [10, 20, 30, 50],
+    icon: 'pushup',
   },
   {
     id: 'addominali',
@@ -62,6 +67,7 @@ export const FITNESS_QUESTS: QuestTemplate[] = [
     unit: 'reps',
     expBase: 50,
     variants: [15, 30, 50],
+    icon: 'pushup',
   },
   {
     id: 'plank',
@@ -71,6 +77,7 @@ export const FITNESS_QUESTS: QuestTemplate[] = [
     unit: 'min',
     expBase: 60,
     variants: [1, 2, 3],
+    icon: 'pushup',
   },
   {
     id: 'yoga',
@@ -80,6 +87,7 @@ export const FITNESS_QUESTS: QuestTemplate[] = [
     unit: 'min',
     expBase: 80,
     variants: [10, 20, 30],
+    icon: 'meditate',
   },
   {
     id: 'scale',
@@ -89,6 +97,7 @@ export const FITNESS_QUESTS: QuestTemplate[] = [
     unit: 'floors',
     expBase: 70,
     variants: [5, 10, 20],
+    icon: 'run',
   },
 ]
 
@@ -102,6 +111,7 @@ export const MENTAL_QUESTS: QuestTemplate[] = [
     unit: 'min',
     expBase: 100,
     variants: [10, 15, 20, 30],
+    icon: 'meditate',
   },
   {
     id: 'lettura',
@@ -111,6 +121,7 @@ export const MENTAL_QUESTS: QuestTemplate[] = [
     unit: 'pages',
     expBase: 80,
     variants: [10, 20, 30, 50],
+    icon: 'book',
   },
   {
     id: 'studio',
@@ -120,6 +131,7 @@ export const MENTAL_QUESTS: QuestTemplate[] = [
     unit: 'min',
     expBase: 100,
     variants: [30, 60, 90],
+    icon: 'book',
   },
   {
     id: 'scrittura',
@@ -129,6 +141,7 @@ export const MENTAL_QUESTS: QuestTemplate[] = [
     unit: 'min',
     expBase: 70,
     variants: [15, 30],
+    icon: 'book',
   },
   {
     id: 'noscreen',
@@ -138,6 +151,7 @@ export const MENTAL_QUESTS: QuestTemplate[] = [
     unit: 'h',
     expBase: 90,
     variants: [1, 2],
+    icon: 'meditate',
   },
 ]
 
@@ -155,6 +169,7 @@ export interface DailyQuest {
   completed: boolean
   date: string  // YYYY-MM-DD
   jollyName?: string
+  icon: string
 }
 
 function pickVariantForLevel(template: QuestTemplate, level: number): number {
@@ -178,6 +193,7 @@ function generateQuestFromTemplate(t: QuestTemplate, level: number, dateStr: str
     expReward: Math.round(t.expBase * expMultiplier),
     completed: false,
     date: dateStr,
+    icon: t.icon,
   }
 }
 

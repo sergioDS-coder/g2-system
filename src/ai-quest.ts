@@ -26,6 +26,7 @@ function buildDailyQuest(data: AIQuestData, level: number, dateStr: string, idx:
     completed: false,
     date: dateStr,
     jollyName: data.name,
+    icon: data.type === 'mental' ? 'book' : 'run',
   }
 }
 
@@ -96,6 +97,7 @@ export async function generateJollyQuest(
       completed: false,
       date: dateStr,
       jollyName: data.name,
+      icon: 'sword',
     }
   } catch (err) {
     console.error('Errore quest jolly:', err)

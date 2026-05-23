@@ -286,12 +286,19 @@ async function startChangeName() {
 // ─── Navigazione ─────────────────────────────────────────────────────────────
 
 async function goToQuestList() {
-  await display.updateImage("sword")
   currentScreen = 'questList'; questIdx = 0
+  if (quests[questIdx]) {
+    await display.updateImage(quests[questIdx].icon)
+  } else {
+    await display.updateImage("sword")
+  }
   await display.update(display.buildQuestList(quests, questIdx))
 }
 
 async function refreshQuestList() {
+  if (quests[questIdx]) {
+    await display.updateImage(quests[questIdx].icon)
+  }
   await display.update(display.buildQuestList(quests, questIdx))
 }
 
@@ -456,11 +463,14 @@ async function handleNameInputPress() {
 
 async function handleQuestListPress() {
   if (questIdx === quests.length + 1) {
-    await bridge.shutDownPageContainer(1)
+    await bridge.shutDownPageContainer(0)
   } else if (questIdx === quests.length) {
     await goToProfile()
   } else {
     detailIdx = 0; currentScreen = 'questDetail'
+    if (quests[questIdx]) {
+      await display.updateImage(quests[questIdx].icon)
+    }
     await display.update(display.buildQuestDetail(quests[questIdx], detailIdx))
   }
 }
@@ -564,8 +574,9 @@ async function handleSwipeDown() {
 }
 
 async function handleDoublePress() {
-  if (currentScreen === 'questList') await bridge.shutDownPageContainer(1)
-  else await bridge.shutDownPageContainer(0)
+  console.log('[Main] Double press -> Direct Exit')
+  // Using 0 as it's the standard for direct exit without confirmation in most SDK versions
+  await bridge.shutDownPageContainer(0)
 }
 
 main().catch(async (err) => {
