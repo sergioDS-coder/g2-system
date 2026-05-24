@@ -20,7 +20,7 @@ const TEXT_X = IMG_W        // text container starts after image
 const TEXT_W = W - IMG_W    // 396px → ~19 chars per line
 const SHORT_LINE = '───────────────────'  // fits in narrow text container
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v1.9.0'
+export const VERSION = 'v1.9.1'
 
 
 function truncate(text: string, maxLen: number): string {
@@ -96,6 +96,8 @@ export class G2Display {
     if (!this.initialized) return
     const content = this.buildQuestDetailNarrow(q, selectedIdx)
 
+    const [topData, botData] = await renderQuestImages(q.templateId, this._questCardInfo(q))
+
     if (!this.inImageMode) {
       // Enter image mode: rebuild with 2 image containers + 1 narrow text container
       this.inImageMode = true
@@ -103,8 +105,9 @@ export class G2Display {
       await this._rebuildWithImages(content)
       // Let the container layout settle before pushing image bytes
       await new Promise(r => setTimeout(r, 250))
-      await this._sendQuestImages(q)
+      const res = await this._sendImages(topData, botData)
       this.lastImageTemplateId = q.id
+      await this._showImgDebug(content, res, topData.length, botData.length)
     } else {
       // Already in image mode: only update text if changed
       if (content !== this.lastContent) {
@@ -120,8 +123,9 @@ export class G2Display {
       }
       // Update image only if quest changed
       if (this.lastImageTemplateId !== q.id) {
-        await this._sendQuestImages(q)
+        const res = await this._sendImages(topData, botData)
         this.lastImageTemplateId = q.id
+        await this._showImgDebug(content, res, topData.length, botData.length)
       }
     }
   }
@@ -156,14 +160,29 @@ export class G2Display {
     })
   }
 
-  private async _sendQuestImages(q: DailyQuest): Promise<void> {
-    const [topData, botData] = await renderQuestImages(q.templateId, this._questCardInfo(q))
-    await this._sendImages(topData, botData)
+  private async _sendImages(topData: string, botData: string): Promise<[string, string]> {
+    const rt = await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 2, containerName: 'img-top', imageData: topData }))
+    const rb = await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 3, containerName: 'img-bot', imageData: botData }))
+    return [String(rt), String(rb)]
   }
 
-  private async _sendImages(topData: string, botData: string): Promise<void> {
-    await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 2, containerName: 'img-top', imageData: topData }))
-    await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 3, containerName: 'img-bot', imageData: botData }))
+  /** TEMP diagnostic: pushes a debug line showing image-send results + payload sizes */
+  private async _showImgDebug(content: string, results: [string, string], topLen: number, botLen: number): Promise<void> {
+    const code = (r: string) => r.includes('success') ? 'OK'
+      : r.includes('SizeInvalid') ? 'SIZE'
+      : r.includes('Gray4') ? 'GRAY4'
+      : r.includes('sendFailed') ? 'SEND'
+      : r.includes('Exception') ? 'EXC'
+      : r.slice(0, 6)
+    const tKb = (topLen / 1024).toFixed(1)
+    const bKb = (botLen / 1024).toFixed(1)
+    const dbg = `${content}\n──────\nIMG ${code(results[0])}/${code(results[1])}\n${tKb}+${bKb}KB`
+    this.lastContent = dbg
+    try {
+      await (this.bridge as any).textContainerUpgrade({
+        containerID: 1, containerName: 'main', content: dbg, contentOffset: 0, contentLength: dbg.length,
+      })
+    } catch { /* ignore */ }
   }
 
   private _questCardInfo(q: DailyQuest): QuestCardInfo {
@@ -192,8 +211,9 @@ export class G2Display {
       this.lastContent = content
       await this._rebuildWithImages(content)
       await new Promise(r => setTimeout(r, 250))
-      await this._sendImages(imgs[0], imgs[1])
+      const res = await this._sendImages(imgs[0], imgs[1])
       this.lastImageTemplateId = imageKey
+      await this._showImgDebug(content, res, imgs[0].length, imgs[1].length)
     } else {
       if (content !== this.lastContent) {
         this.lastContent = content
@@ -207,8 +227,9 @@ export class G2Display {
         }
       }
       if (this.lastImageTemplateId !== imageKey) {
-        await this._sendImages(imgs[0], imgs[1])
+        const res = await this._sendImages(imgs[0], imgs[1])
         this.lastImageTemplateId = imageKey
+        await this._showImgDebug(content, res, imgs[0].length, imgs[1].length)
       }
     }
   }
