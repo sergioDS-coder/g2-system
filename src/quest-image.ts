@@ -17,7 +17,7 @@ export interface QuestCardInfo {
 export async function renderQuestImages(
   templateId: string,
   info?: QuestCardInfo,
-): Promise<[string, string]> {
+): Promise<[number[], number[]]> {
   const canvas = document.createElement('canvas')
   canvas.width = IMG_W
   canvas.height = IMG_H * 2
@@ -37,18 +37,18 @@ export async function renderQuestImages(
   if (info) drawCardOverlay(ctx, info)
 
   return [
-    canvasToJpegBase64(canvas, 0, 0, IMG_W, IMG_H),
-    canvasToJpegBase64(canvas, 0, IMG_H, IMG_W, IMG_H),
+    canvasToImageBytes(canvas, 0, 0, IMG_W, IMG_H),
+    canvasToImageBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
   ]
 }
 
 /** Loads /welcome-images/<rank>.png and splits it into the two containers. */
-export async function renderWelcomeImage(rank: string): Promise<[string, string] | null> {
+export async function renderWelcomeImage(rank: string): Promise<[number[], number[]] | null> {
   const c = await loadImageFile(`/welcome-images/${rank}.png`)
   if (!c) return null
   return [
-    canvasToJpegBase64(c, 0, 0, IMG_W, IMG_H),
-    canvasToJpegBase64(c, 0, IMG_H, IMG_W, IMG_H),
+    canvasToImageBytes(c, 0, 0, IMG_W, IMG_H),
+    canvasToImageBytes(c, 0, IMG_H, IMG_W, IMG_H),
   ]
 }
 
@@ -96,16 +96,17 @@ function loadImageFile(url: string): Promise<HTMLCanvasElement | null> {
   })
 }
 
-/** Extracts a region, quantizes to 16 gray levels and encodes as JPEG (small,
- *  universally supported). Returns base64 string — no data-URL prefix — ready
- *  for imageData in ImageRawDataUpdate. */
-function canvasToJpegBase64(src: HTMLCanvasElement, sx: number, sy: number, w: number, h: number): string {
+/** Extracts a region, quantizes to 16 gray levels and encodes as PNG.
+ *  Returns raw bytes as number[] — the format recommended by the Even SDK for
+ *  imageData in ImageRawDataUpdate (number[] is passed as List<int> to Flutter,
+ *  which correctly forwards binary to the glasses firmware via BLE). */
+function canvasToImageBytes(src: HTMLCanvasElement, sx: number, sy: number, w: number, h: number): number[] {
   const c = document.createElement('canvas')
   c.width = w; c.height = h
   const ctx = c.getContext('2d')!
   ctx.drawImage(src, sx, sy, w, h, 0, 0, w, h)
 
-  // Quantize to 16 gray levels (simple scheme, small payload)
+  // Quantize to 16 gray levels before encoding
   const img = ctx.getImageData(0, 0, w, h)
   const d = img.data
   for (let i = 0; i < d.length; i += 4) {
@@ -116,7 +117,10 @@ function canvasToJpegBase64(src: HTMLCanvasElement, sx: number, sy: number, w: n
   }
   ctx.putImageData(img, 0, 0)
 
-  return c.toDataURL('image/jpeg', 0.7).split(',')[1]
+  // PNG (lossless) → decode base64 → number[] of raw bytes
+  const base64 = c.toDataURL('image/png').split(',')[1]
+  const binary = atob(base64)
+  return Array.from({ length: binary.length }, (_, i) => binary.charCodeAt(i))
 }
 
 // ── Silhouette primitives ──────────────────────────────────────────────────────

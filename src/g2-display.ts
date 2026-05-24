@@ -2,7 +2,10 @@ import {
   TextContainerProperty,
   ImageContainerProperty,
   ImageRawDataUpdate,
+  ImageRawDataUpdateResult,
   CreateStartUpPageContainer,
+  RebuildPageContainer,
+  TextContainerUpgrade,
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 
@@ -20,7 +23,7 @@ const TEXT_X = IMG_W        // text container starts after image
 const TEXT_W = W - IMG_W    // 396px → ~19 chars per line
 const SHORT_LINE = '───────────────────'  // fits in narrow text container
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v1.9.3'
+export const VERSION = 'v1.9.0'
 
 
 function truncate(text: string, maxLen: number): string {
@@ -76,15 +79,11 @@ export class G2Display {
       return
     }
 
-    // textContainerUpgrade expects 1 argument (an object) in SDK 0.0.10
     try {
-      await (this.bridge as any).textContainerUpgrade({
-        containerID: 1,
-        containerName: 'main',
-        content: content,
-        contentOffset: 0,
-        contentLength: content.length
-      })
+      await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
+        containerID: 1, containerName: 'main',
+        content, contentOffset: 0, contentLength: content.length,
+      }))
     } catch (e) {
       console.error('Update failed, rebuilding page', e)
       await this._rebuildFullWidth(content)
@@ -95,74 +94,89 @@ export class G2Display {
   async showQuestDetail(q: DailyQuest, selectedIdx = 0): Promise<void> {
     if (!this.initialized) return
     const content = this.buildQuestDetailNarrow(q, selectedIdx)
-
     const [topData, botData] = await renderQuestImages(q.templateId, this._questCardInfo(q))
 
     if (!this.inImageMode) {
-      // Enter image mode: rebuild with 2 image containers + 1 narrow text container
       this.inImageMode = true
       this.lastContent = content
-      await this._rebuildWithImages(content)
-      // Let the container layout settle before pushing image bytes
-      await new Promise(r => setTimeout(r, 800))
-      await this._sendImages(topData, botData)
-      this.lastImageTemplateId = q.id
+      const ok = await this._rebuildWithImages(content)
+      if (ok) {
+        const [r1, r2] = await this._sendImages(topData, botData)
+        this.lastImageTemplateId = q.id
+        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
+      }
     } else {
-      // Already in image mode: only update text if changed
       if (content !== this.lastContent) {
         this.lastContent = content
         try {
-          await (this.bridge as any).textContainerUpgrade({
+          await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
             containerID: 1, containerName: 'main',
-            content, contentOffset: 0, contentLength: content.length
-          })
-        } catch (e) {
+            content, contentOffset: 0, contentLength: content.length,
+          }))
+        } catch {
           await this._rebuildWithImages(content)
         }
       }
-      // Update image only if quest changed
       if (this.lastImageTemplateId !== q.id) {
-        await this._sendImages(topData, botData)
+        const [r1, r2] = await this._sendImages(topData, botData)
         this.lastImageTemplateId = q.id
+        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
       }
     }
   }
 
   private async _rebuildFullWidth(content: string): Promise<void> {
-    const container = new TextContainerProperty({
-      xPosition: 0, yPosition: 0, width: W, height: H,
-      borderWidth: 0, borderColor: 5, paddingLength: PAD,
-      containerID: 1, containerName: 'main', content, isEventCapture: 1,
-    })
-    await (this.bridge as any).rebuildPageContainer({ containerTotalNum: 1, textObject: [container] })
+    await this.bridge.rebuildPageContainer(new RebuildPageContainer({
+      containerTotalNum: 1,
+      textObject: [new TextContainerProperty({
+        xPosition: 0, yPosition: 0, width: W, height: H,
+        borderWidth: 0, borderColor: 5, paddingLength: PAD,
+        containerID: 1, containerName: 'main', content, isEventCapture: 1,
+      })],
+    }))
   }
 
-  private async _rebuildWithImages(content: string): Promise<void> {
-    const imgTop = new ImageContainerProperty({
-      xPosition: 0, yPosition: 0, width: IMG_W, height: IMG_H,
-      containerID: 2, containerName: 'img-top',
-    })
-    const imgBot = new ImageContainerProperty({
-      xPosition: 0, yPosition: IMG_H, width: IMG_W, height: IMG_H,
-      containerID: 3, containerName: 'img-bot',
-    })
-    const txt = new TextContainerProperty({
-      xPosition: TEXT_X, yPosition: 0, width: TEXT_W, height: H,
-      borderWidth: 0, borderColor: 5, paddingLength: PAD,
-      containerID: 1, containerName: 'main', content, isEventCapture: 1,
-    })
-    await (this.bridge as any).rebuildPageContainer({
+  private async _rebuildWithImages(content: string): Promise<boolean> {
+    return this.bridge.rebuildPageContainer(new RebuildPageContainer({
       containerTotalNum: 3,
-      imageObject: [imgTop, imgBot],
-      textObject: [txt],
-    })
+      imageObject: [
+        new ImageContainerProperty({ xPosition: 0, yPosition: 0, width: IMG_W, height: IMG_H, containerID: 2, containerName: 'img-top' }),
+        new ImageContainerProperty({ xPosition: 0, yPosition: IMG_H, width: IMG_W, height: IMG_H, containerID: 3, containerName: 'img-bot' }),
+      ],
+      textObject: [new TextContainerProperty({
+        xPosition: TEXT_X, yPosition: 0, width: TEXT_W, height: H,
+        borderWidth: 0, borderColor: 5, paddingLength: PAD,
+        containerID: 1, containerName: 'main', content, isEventCapture: 1,
+      })],
+    }))
   }
 
-  private async _sendImages(topData: string, botData: string): Promise<void> {
-    await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 2, containerName: 'img-top', imageData: topData }))
-    // small pause so real BLE glasses can finish processing the first image
-    await new Promise(r => setTimeout(r, 300))
-    await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 3, containerName: 'img-bot', imageData: botData }))
+  private async _sendImages(top: number[], bot: number[]): Promise<[ImageRawDataUpdateResult, ImageRawDataUpdateResult]> {
+    const r1 = await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 2, containerName: 'img-top', imageData: top }))
+    const r2 = await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 3, containerName: 'img-bot', imageData: bot }))
+    return [r1, r2]
+  }
+
+  /** Appends image-send diagnostic to the text panel so we can read it on the glasses. */
+  private async _showImgDiag(
+    content: string,
+    r1: ImageRawDataUpdateResult, r2: ImageRawDataUpdateResult,
+    len1: number, len2: number,
+  ): Promise<void> {
+    const code = (r: ImageRawDataUpdateResult) =>
+      ImageRawDataUpdateResult.isSuccess(r) ? 'OK' :
+      ImageRawDataUpdateResult.isImageSizeInvalid(r) ? 'SIZE' :
+      ImageRawDataUpdateResult.isImageToGray4Failed(r) ? 'GRAY4' :
+      ImageRawDataUpdateResult.isSendFailed(r) ? 'SEND' : 'ERR'
+    const kb = (n: number) => (n / 1024).toFixed(1)
+    const diag = `${content}\n─\nIMG:${code(r1)} ${code(r2)}\n${kb(len1)}+${kb(len2)}KB`
+    this.lastContent = diag
+    try {
+      await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
+        containerID: 1, containerName: 'main',
+        content: diag, contentOffset: 0, contentLength: diag.length,
+      }))
+    } catch { /* ignore */ }
   }
 
   private _questCardInfo(q: DailyQuest): QuestCardInfo {
@@ -189,25 +203,28 @@ export class G2Display {
     if (!this.inImageMode) {
       this.inImageMode = true
       this.lastContent = content
-      await this._rebuildWithImages(content)
-      await new Promise(r => setTimeout(r, 800))
-      await this._sendImages(imgs[0], imgs[1])
-      this.lastImageTemplateId = imageKey
+      const ok = await this._rebuildWithImages(content)
+      if (ok) {
+        const [r1, r2] = await this._sendImages(imgs[0], imgs[1])
+        this.lastImageTemplateId = imageKey
+        await this._showImgDiag(content, r1, r2, imgs[0].length, imgs[1].length)
+      }
     } else {
       if (content !== this.lastContent) {
         this.lastContent = content
         try {
-          await (this.bridge as any).textContainerUpgrade({
+          await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
             containerID: 1, containerName: 'main',
-            content, contentOffset: 0, contentLength: content.length
-          })
-        } catch (e) {
+            content, contentOffset: 0, contentLength: content.length,
+          }))
+        } catch {
           await this._rebuildWithImages(content)
         }
       }
       if (this.lastImageTemplateId !== imageKey) {
-        await this._sendImages(imgs[0], imgs[1])
+        const [r1, r2] = await this._sendImages(imgs[0], imgs[1])
         this.lastImageTemplateId = imageKey
+        await this._showImgDiag(content, r1, r2, imgs[0].length, imgs[1].length)
       }
     }
   }
