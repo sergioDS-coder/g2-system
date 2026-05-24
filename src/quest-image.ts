@@ -17,7 +17,7 @@ export interface QuestCardInfo {
 export async function renderQuestImages(
   templateId: string,
   info?: QuestCardInfo,
-): Promise<[string, string]> {
+): Promise<[number[], number[]]> {
   const canvas = document.createElement('canvas')
   canvas.width = IMG_W
   canvas.height = IMG_H * 2
@@ -37,18 +37,18 @@ export async function renderQuestImages(
   if (info) drawCardOverlay(ctx, info)
 
   return [
-    cropToDataURL(canvas, 0, 0, IMG_W, IMG_H),
-    cropToDataURL(canvas, 0, IMG_H, IMG_W, IMG_H),
+    canvasToGray4(canvas, 0, 0, IMG_W, IMG_H),
+    canvasToGray4(canvas, 0, IMG_H, IMG_W, IMG_H),
   ]
 }
 
 /** Loads /welcome-images/<rank>.png and splits it into the two containers. */
-export async function renderWelcomeImage(rank: string): Promise<[string, string] | null> {
+export async function renderWelcomeImage(rank: string): Promise<[number[], number[]] | null> {
   const c = await loadImageFile(`/welcome-images/${rank}.png`)
   if (!c) return null
   return [
-    cropToDataURL(c, 0, 0, IMG_W, IMG_H),
-    cropToDataURL(c, 0, IMG_H, IMG_W, IMG_H),
+    canvasToGray4(c, 0, 0, IMG_W, IMG_H),
+    canvasToGray4(c, 0, IMG_H, IMG_W, IMG_H),
   ]
 }
 
@@ -96,11 +96,22 @@ function loadImageFile(url: string): Promise<HTMLCanvasElement | null> {
   })
 }
 
-function cropToDataURL(src: HTMLCanvasElement, x: number, y: number, w: number, h: number): string {
+/** Extracts a region and encodes it as packed gray4 bytes (2px/byte, MSB=first pixel).
+ *  Returns number[] — the SDK-recommended format for updateImageRawData. */
+function canvasToGray4(src: HTMLCanvasElement, sx: number, sy: number, w: number, h: number): number[] {
   const c = document.createElement('canvas')
   c.width = w; c.height = h
-  c.getContext('2d')!.drawImage(src, x, y, w, h, 0, 0, w, h)
-  return c.toDataURL('image/png').split(',')[1]
+  c.getContext('2d')!.drawImage(src, sx, sy, w, h, 0, 0, w, h)
+  const rgba = c.getContext('2d')!.getImageData(0, 0, w, h).data
+  const bytes: number[] = []
+  const total = w * h
+  for (let i = 0; i < total; i += 2) {
+    const a = i * 4, b = (i + 1) * 4
+    const l1 = Math.round((rgba[a] * 299 + rgba[a + 1] * 587 + rgba[a + 2] * 114) / 255000 * 15)
+    const l2 = (i + 1 < total) ? Math.round((rgba[b] * 299 + rgba[b + 1] * 587 + rgba[b + 2] * 114) / 255000 * 15) : 0
+    bytes.push((l1 << 4) | (l2 & 0xF))
+  }
+  return bytes
 }
 
 // ── Silhouette primitives ──────────────────────────────────────────────────────
