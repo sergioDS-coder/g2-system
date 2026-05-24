@@ -33,8 +33,8 @@ export class SupabaseClient {
   private key: string
 
   constructor(url: string, anonKey: string) {
-    this.url = url.replace(/\/$/, '')
-    this.key = anonKey
+    this.url = url ? url.replace(/\/$/, '') : ''
+    this.key = anonKey ?? ''
   }
 
   private headers() {

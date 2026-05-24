@@ -470,6 +470,7 @@ async function handleDoublePress() {
 
 main().catch(async (err) => {
   console.error('Errore fatale:', err)
-  try { await display?.update(display.buildError('Errore di avvio')) }
+  const msg = err instanceof Error ? err.message.slice(0, 26) : 'Errore di avvio'
+  try { await display?.update(display.buildError(msg)) }
   catch {}
 })
