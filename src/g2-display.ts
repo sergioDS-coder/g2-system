@@ -197,9 +197,44 @@ export class G2Display {
     if (!this.initialized) return
     const content = this.buildDailyMessageNarrow(rank, level, selectedIdx)
     const imgs = await renderWelcomeImage(rank)
-    if (!imgs) { await this.update(this.buildDailyMessage(selectedIdx)); return }
 
     const imageKey = 'welcome_' + rank
+    if (!this.inImageMode) {
+      this.inImageMode = true
+      this.lastContent = content
+      const ok = await this._rebuildWithImages(content)
+      if (ok) {
+        const [r1, r2] = await this._sendImages(imgs[0], imgs[1])
+        this.lastImageTemplateId = imageKey
+        await this._showImgDiag(content, r1, r2, imgs[0].length, imgs[1].length)
+      }
+    } else {
+      if (content !== this.lastContent) {
+        this.lastContent = content
+        try {
+          await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
+            containerID: 1, containerName: 'main',
+            content, contentOffset: 0, contentLength: content.length,
+          }))
+        } catch {
+          await this._rebuildWithImages(content)
+        }
+      }
+      if (this.lastImageTemplateId !== imageKey) {
+        const [r1, r2] = await this._sendImages(imgs[0], imgs[1])
+        this.lastImageTemplateId = imageKey
+        await this._showImgDiag(content, r1, r2, imgs[0].length, imgs[1].length)
+      }
+    }
+  }
+
+  /** Profile screen with rank card image on the left + stats on the right */
+  async showProfile(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0): Promise<void> {
+    if (!this.initialized) return
+    const content = this.buildProfileNarrow(player, rankPosition, selectedIdx)
+    const imgs = await renderWelcomeImage(player.rank)
+    const imageKey = 'rank_' + player.rank
+
     if (!this.inImageMode) {
       this.inImageMode = true
       this.lastContent = content
@@ -243,6 +278,29 @@ export class G2Display {
       `${c(1)} Esci`,
       SHORT_LINE,
       '▲/▼  [P]=Seleziona',
+    ].join('\n')
+  }
+
+  /** Profile text for narrow right column (right of rank card image, ~19 chars/line) */
+  buildProfileNarrow(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0): string {
+    const tr = t(this.lang)
+    const a = player.attributes
+    const rankPos = rankPosition ? `#${rankPosition}` : '-'
+    const c = (i: number) => i === selectedIdx ? '▶' : ' '
+    const name = truncate(player.name, 13)
+
+    return [
+      `${name} ${rankPos}`,
+      `Lv.${player.level} · ${player.rank}`,
+      SHORT_LINE,
+      `EXP:${player.expCurrent}/${player.expTotal}`,
+      SHORT_LINE,
+      `${tr.attrFor}:${a.str} ${tr.attrAgi}:${a.agi} ${tr.attrVit}:${a.vit}`,
+      `${tr.attrInt}:${a.int} ${tr.attrEnd}:${a.end}  Q:${player.questsCompleted}`,
+      SHORT_LINE,
+      `${c(0)} Ranking`,
+      `${c(1)} Name`,
+      `${c(2)} Back`,
     ].join('\n')
   }
 

@@ -42,14 +42,17 @@ export async function renderQuestImages(
   ]
 }
 
-/** Loads /welcome-images/<rank>.png and splits it into the two containers. */
-export async function renderWelcomeImage(rank: string): Promise<[number[], number[]] | null> {
+/** Loads /welcome-images/<rank>.png and splits it into the two containers.
+ *  Falls back to a Canvas-drawn rank card if the PNG file is not found. */
+export async function renderWelcomeImage(rank: string): Promise<[number[], number[]]> {
   const c = await loadImageFile(`/welcome-images/${rank}.png`)
-  if (!c) return null
-  return [
-    canvasToImageBytes(c, 0, 0, IMG_W, IMG_H),
-    canvasToImageBytes(c, 0, IMG_H, IMG_W, IMG_H),
-  ]
+  if (c) {
+    return [
+      canvasToImageBytes(c, 0, 0, IMG_W, IMG_H),
+      canvasToImageBytes(c, 0, IMG_H, IMG_W, IMG_H),
+    ]
+  }
+  return renderRankCard(rank)
 }
 
 /** Draws a top "type" header and a bottom stats band over the icon. */
@@ -76,6 +79,80 @@ function drawCardOverlay(ctx: CanvasRenderingContext2D, info: QuestCardInfo) {
   ctx.fillText(`+${info.exp} EXP`, W / 2, bandY + 22)
   ctx.font = '17px monospace'
   ctx.fillText(`${info.attr} · ${info.amount} ${info.unit}`, W / 2, bandY + 45)
+}
+
+/** Canvas-drawn rank card — used when the PNG file is not found. */
+function renderRankCard(rank: string): [number[], number[]] {
+  const canvas = document.createElement('canvas')
+  canvas.width = IMG_W
+  canvas.height = IMG_H * 2
+  const ctx = canvas.getContext('2d')!
+  const W = IMG_W, H = IMG_H * 2
+
+  ctx.fillStyle = '#000'
+  ctx.fillRect(0, 0, W, H)
+  ctx.fillStyle = '#fff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  // Outer border (double frame)
+  ctx.strokeStyle = '#fff'
+  ctx.lineWidth = 2
+  ctx.strokeRect(8, 8, W - 16, H - 16)
+  ctx.lineWidth = 1
+  ctx.strokeRect(13, 13, W - 26, H - 26)
+
+  // Header band: filled white, black text "SYSTEM RANK"
+  ctx.fillRect(8, 8, W - 16, 36)
+  ctx.fillStyle = '#000'
+  ctx.font = 'bold 14px monospace'
+  ctx.fillText('SYSTEM RANK', W / 2, 26)
+  ctx.fillStyle = '#fff'
+
+  // Divider below header
+  ctx.fillRect(13, 44, W - 26, 1)
+
+  // Subtle aura circles behind the rank letter
+  const cy = 128
+  for (let r = 58; r >= 28; r -= 15) {
+    ctx.globalAlpha = 0.07
+    ctx.beginPath(); ctx.arc(W / 2, cy, r, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.globalAlpha = 1
+
+  // Large rank letter
+  const fs = rank.length === 1 ? 92 : rank.length === 2 ? 68 : 50
+  ctx.font = `bold ${fs}px monospace`
+  ctx.fillText(rank, W / 2, cy)
+
+  // Divider above stars
+  ctx.font = '1px monospace'
+  ctx.fillRect(13, 193, W - 26, 1)
+
+  // Stars (1 per F … 9 per SSS)
+  const STAR_COUNT: Record<string, number> = { F:1, E:2, D:3, C:4, B:5, A:6, S:7, SS:8, SSS:9 }
+  const total = STAR_COUNT[rank] ?? 1
+  ctx.font = '15px monospace'
+  const sp = 19
+  let left = total, sy = 211
+  while (left > 0) {
+    const n = Math.min(left, 5)
+    const ox = W / 2 - (n * sp) / 2 + sp / 2
+    for (let i = 0; i < n; i++) ctx.fillText('★', ox + i * sp, sy)
+    left -= n; sy += 21
+  }
+
+  // Divider above footer
+  ctx.fillRect(13, H - 36, W - 26, 1)
+
+  // Footer label
+  ctx.font = 'bold 13px monospace'
+  ctx.fillText('H U N T E R', W / 2, H - 20)
+
+  return [
+    canvasToImageBytes(canvas, 0, 0, IMG_W, IMG_H),
+    canvasToImageBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
+  ]
 }
 
 function loadImageFile(url: string): Promise<HTMLCanvasElement | null> {

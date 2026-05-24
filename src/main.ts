@@ -218,7 +218,7 @@ async function refreshQuestList() {
 async function goToProfile() {
   currentScreen = 'profile'; profileIdx = 0
   myRankPos = await supabase.getPlayerRank(player!.playerId)
-  await display.update(display.buildProfile(player!, myRankPos, profileIdx))
+  await display.showProfile(player!, myRankPos, profileIdx)
 }
 
 async function goToRanking() {
@@ -417,7 +417,7 @@ async function handleSwipeUp() {
     case 'rankUp':
       rankUpIdx = Math.max(0, rankUpIdx - 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
-      if (profileIdx > 0) { profileIdx--; await display.update(display.buildProfile(player!, myRankPos, profileIdx)) } break
+      if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
     case 'ranking':
       if (rankingIdx > 0) {
         rankingIdx--; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
@@ -449,7 +449,7 @@ async function handleSwipeDown() {
     case 'rankUp':
       rankUpIdx = Math.min(1, rankUpIdx + 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
-      if (profileIdx < 2) { profileIdx++; await display.update(display.buildProfile(player!, myRankPos, profileIdx)) } break
+      if (profileIdx < 2) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
     case 'ranking': {
       const itemsPerPage = 4
       const totalPages = Math.ceil(ranking.length / itemsPerPage)
