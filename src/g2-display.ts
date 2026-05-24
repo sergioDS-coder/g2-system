@@ -11,7 +11,7 @@ import type { DailyQuest } from './quest-data'
 import type { RankingEntry } from './supabase-client'
 import type { Lang } from './i18n'
 import { t } from './i18n'
-import { renderQuestImages, IMG_W, IMG_H } from './quest-image'
+import { renderQuestImages, renderWelcomeImage, type QuestCardInfo, IMG_W, IMG_H } from './quest-image'
 
 const W = 576
 const H = 288
@@ -20,7 +20,7 @@ const TEXT_X = IMG_W        // text container starts after image
 const TEXT_W = W - IMG_W    // 396px → ~19 chars per line
 const SHORT_LINE = '───────────────────'  // fits in narrow text container
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v1.8.0'
+export const VERSION = 'v1.9.0'
 
 
 function truncate(text: string, maxLen: number): string {
@@ -103,8 +103,8 @@ export class G2Display {
       await this._rebuildWithImages(content)
       // Let the container layout settle before pushing image bytes
       await new Promise(r => setTimeout(r, 250))
-      await this._sendQuestImages(q.templateId)
-      this.lastImageTemplateId = q.templateId
+      await this._sendQuestImages(q)
+      this.lastImageTemplateId = q.id
     } else {
       // Already in image mode: only update text if changed
       if (content !== this.lastContent) {
@@ -119,9 +119,9 @@ export class G2Display {
         }
       }
       // Update image only if quest changed
-      if (this.lastImageTemplateId !== q.templateId) {
-        await this._sendQuestImages(q.templateId)
-        this.lastImageTemplateId = q.templateId
+      if (this.lastImageTemplateId !== q.id) {
+        await this._sendQuestImages(q)
+        this.lastImageTemplateId = q.id
       }
     }
   }
@@ -156,10 +156,78 @@ export class G2Display {
     })
   }
 
-  private async _sendQuestImages(templateId: string): Promise<void> {
-    const [topData, botData] = await renderQuestImages(templateId)
+  private async _sendQuestImages(q: DailyQuest): Promise<void> {
+    const [topData, botData] = await renderQuestImages(q.templateId, this._questCardInfo(q))
+    await this._sendImages(topData, botData)
+  }
+
+  private async _sendImages(topData: string, botData: string): Promise<void> {
     await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 2, containerName: 'img-top', imageData: topData }))
     await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 3, containerName: 'img-bot', imageData: botData }))
+  }
+
+  private _questCardInfo(q: DailyQuest): QuestCardInfo {
+    const tr = t(this.lang)
+    const attrKey = 'attr' + q.attribute.charAt(0).toUpperCase() + q.attribute.slice(1)
+    const attr = (tr as any)[attrKey] ?? q.attribute.toUpperCase()
+    return {
+      type: q.type === 'jolly' ? 'JOLLY' : q.type.toUpperCase(),
+      attr,
+      exp: q.expReward,
+      amount: q.amount,
+      unit: q.unit,
+    }
+  }
+
+  /** Greeting screen: shows the player's rank card image on the left + message on the right */
+  async showDailyMessage(rank: Rank, level: number, selectedIdx = 0): Promise<void> {
+    if (!this.initialized) return
+    const content = this.buildDailyMessageNarrow(rank, level, selectedIdx)
+    const imgs = await renderWelcomeImage(rank)
+    if (!imgs) { await this.update(this.buildDailyMessage(selectedIdx)); return }
+
+    const imageKey = 'welcome_' + rank
+    if (!this.inImageMode) {
+      this.inImageMode = true
+      this.lastContent = content
+      await this._rebuildWithImages(content)
+      await new Promise(r => setTimeout(r, 250))
+      await this._sendImages(imgs[0], imgs[1])
+      this.lastImageTemplateId = imageKey
+    } else {
+      if (content !== this.lastContent) {
+        this.lastContent = content
+        try {
+          await (this.bridge as any).textContainerUpgrade({
+            containerID: 1, containerName: 'main',
+            content, contentOffset: 0, contentLength: content.length
+          })
+        } catch (e) {
+          await this._rebuildWithImages(content)
+        }
+      }
+      if (this.lastImageTemplateId !== imageKey) {
+        await this._sendImages(imgs[0], imgs[1])
+        this.lastImageTemplateId = imageKey
+      }
+    }
+  }
+
+  /** Narrow greeting text (right of the rank image, ~19 chars/line) */
+  buildDailyMessageNarrow(rank: Rank, level: number, selectedIdx = 0): string {
+    const tr = t(this.lang)
+    const c = (i: number) => i === selectedIdx ? '▶' : ' '
+    return [
+      '*** SYSTEM ***',
+      SHORT_LINE,
+      `RANK ${rank} · LV.${level}`,
+      `${tr.newDay}.`,
+      SHORT_LINE,
+      `${c(0)} Accetta Quest`,
+      `${c(1)} Esci`,
+      SHORT_LINE,
+      '▲/▼  [P]=Seleziona',
+    ].join('\n')
   }
 
   buildBootScreen(): string {
@@ -312,19 +380,13 @@ export class G2Display {
   buildQuestDetailNarrow(q: DailyQuest, selectedIdx = 0): string {
     const tr = t(this.lang)
     const name = q.jollyName ?? ((tr as any)[q.nameKey] ?? q.nameKey)
-    const attrKey = 'attr' + q.attribute.charAt(0).toUpperCase() + q.attribute.slice(1)
-    const attr = (tr as any)[attrKey] ?? q.attribute.toUpperCase()
     const jollyTag = q.type === 'jolly' ? '★ ' : ''
-    const typeName = q.type.toUpperCase()
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
 
     return [
       truncate(`${jollyTag}${name.toUpperCase()}`, 18),
-      `── ${typeName}`,
       SHORT_LINE,
-      `${q.amount} ${q.unit}`,
-      attr,
-      `+${q.expReward} EXP`,
+      `▸ ${q.amount} ${q.unit}`,
       q.completed ? '● COMPLETATA' : '○ IN ATTESA',
       SHORT_LINE,
       q.completed

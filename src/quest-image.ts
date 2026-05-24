@@ -6,15 +6,76 @@
 export const IMG_W = 180
 export const IMG_H = 144
 
-export async function renderQuestImages(templateId: string): Promise<[string, string]> {
+export interface QuestCardInfo {
+  type: string    // FITNESS / MENTAL / JOLLY
+  attr: string    // STR / AGI / VIT / INT / END
+  exp: number
+  amount: number
+  unit: string
+}
+
+export async function renderQuestImages(
+  templateId: string,
+  info?: QuestCardInfo,
+): Promise<[string, string]> {
+  const canvas = document.createElement('canvas')
+  canvas.width = IMG_W
+  canvas.height = IMG_H * 2
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#000'
+  ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
+
   const fileCanvas = await loadImageFile(`/quest-images/${templateId}.png`)
   if (fileCanvas) {
-    return [
-      cropToDataURL(fileCanvas, 0, 0, IMG_W, IMG_H),
-      cropToDataURL(fileCanvas, 0, IMG_H, IMG_W, IMG_H),
-    ]
+    ctx.drawImage(fileCanvas, 0, 0)
+  } else {
+    ctx.fillStyle = '#fff'
+    const drawFn = ILLUSTRATIONS[templateId] ?? drawDefault
+    drawFn(ctx, IMG_W, IMG_H * 2)
   }
-  return renderCanvasImages(templateId)
+
+  if (info) drawCardOverlay(ctx, info)
+
+  return [
+    cropToDataURL(canvas, 0, 0, IMG_W, IMG_H),
+    cropToDataURL(canvas, 0, IMG_H, IMG_W, IMG_H),
+  ]
+}
+
+/** Loads /welcome-images/<rank>.png and splits it into the two containers. */
+export async function renderWelcomeImage(rank: string): Promise<[string, string] | null> {
+  const c = await loadImageFile(`/welcome-images/${rank}.png`)
+  if (!c) return null
+  return [
+    cropToDataURL(c, 0, 0, IMG_W, IMG_H),
+    cropToDataURL(c, 0, IMG_H, IMG_W, IMG_H),
+  ]
+}
+
+/** Draws a top "type" header and a bottom stats band over the icon. */
+function drawCardOverlay(ctx: CanvasRenderingContext2D, info: QuestCardInfo) {
+  const W = IMG_W, H = IMG_H * 2
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  // Top header band
+  ctx.fillStyle = 'rgba(0,0,0,0.82)'
+  ctx.fillRect(0, 0, W, 42)
+  ctx.fillStyle = '#fff'
+  ctx.font = 'bold 22px monospace'
+  ctx.fillText(info.type, W / 2, 19)
+  ctx.fillRect(24, 37, W - 48, 2)
+
+  // Bottom stats band
+  const bandY = H - 60
+  ctx.fillStyle = 'rgba(0,0,0,0.82)'
+  ctx.fillRect(0, bandY, W, 60)
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(24, bandY, W - 48, 2)
+  ctx.font = 'bold 26px monospace'
+  ctx.fillText(`+${info.exp} EXP`, W / 2, bandY + 22)
+  ctx.font = '17px monospace'
+  ctx.fillText(`${info.attr} · ${info.amount} ${info.unit}`, W / 2, bandY + 45)
 }
 
 function loadImageFile(url: string): Promise<HTMLCanvasElement | null> {
@@ -33,25 +94,6 @@ function loadImageFile(url: string): Promise<HTMLCanvasElement | null> {
     img.onerror = () => resolve(null)
     img.src = url
   })
-}
-
-function renderCanvasImages(templateId: string): [string, string] {
-  const canvas = document.createElement('canvas')
-  canvas.width = IMG_W
-  canvas.height = IMG_H * 2
-  const ctx = canvas.getContext('2d')!
-
-  ctx.fillStyle = '#000'
-  ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
-  ctx.fillStyle = '#fff'
-
-  const drawFn = ILLUSTRATIONS[templateId] ?? drawDefault
-  drawFn(ctx, IMG_W, IMG_H * 2)
-
-  return [
-    cropToDataURL(canvas, 0, 0, IMG_W, IMG_H),
-    cropToDataURL(canvas, 0, IMG_H, IMG_W, IMG_H),
-  ]
 }
 
 function cropToDataURL(src: HTMLCanvasElement, x: number, y: number, w: number, h: number): string {

@@ -150,7 +150,7 @@ async function initialize() {
     await savePlayer(player)
     await supabase.upsertPlayer(player)
     msgIdx = 0; currentScreen = 'dailyMessage'
-    await display.update(display.buildDailyMessage(msgIdx))
+    await display.showDailyMessage(player.rank, player.level, msgIdx)
   } else {
     const allDone = quests.length > 0 && quests.every(q => q.completed)
     if (allDone) {
@@ -403,7 +403,7 @@ async function handleSwipeUp() {
       await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
       break
     case 'dailyMessage':
-      msgIdx = Math.max(0, msgIdx - 1); await display.update(display.buildDailyMessage(msgIdx)); break
+      msgIdx = Math.max(0, msgIdx - 1); await display.showDailyMessage(player!.rank, player!.level, msgIdx); break
     case 'warning':
       warningIdx = Math.max(0, warningIdx - 1); await display.update(display.buildWarningScreen(warningExpLost, warningIdx)); break
     case 'allDone':
@@ -435,7 +435,7 @@ async function handleSwipeDown() {
       await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
       break
     case 'dailyMessage':
-      msgIdx = Math.min(1, msgIdx + 1); await display.update(display.buildDailyMessage(msgIdx)); break
+      msgIdx = Math.min(1, msgIdx + 1); await display.showDailyMessage(player!.rank, player!.level, msgIdx); break
     case 'warning':
       warningIdx = Math.min(1, warningIdx + 1); await display.update(display.buildWarningScreen(warningExpLost, warningIdx)); break
     case 'allDone':
