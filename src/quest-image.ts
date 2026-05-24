@@ -1,10 +1,41 @@
-// quest-image.ts — Filled silhouette illustrations for G2 image containers
+// quest-image.ts — Quest illustrations for G2 image containers
+// Loads PNG files from /quest-images/<templateId>.png when available,
+// falls back to Canvas-generated silhouettes otherwise.
 // Canvas: 180×288 total (two stacked 180×144 containers)
 
 export const IMG_W = 180
 export const IMG_H = 144
 
-export function renderQuestImages(templateId: string): [string, string] {
+export async function renderQuestImages(templateId: string): Promise<[string, string]> {
+  const fileCanvas = await loadImageFile(`/quest-images/${templateId}.png`)
+  if (fileCanvas) {
+    return [
+      cropToDataURL(fileCanvas, 0, 0, IMG_W, IMG_H),
+      cropToDataURL(fileCanvas, 0, IMG_H, IMG_W, IMG_H),
+    ]
+  }
+  return renderCanvasImages(templateId)
+}
+
+function loadImageFile(url: string): Promise<HTMLCanvasElement | null> {
+  return new Promise((resolve) => {
+    const img = new window.Image()
+    img.onload = () => {
+      const c = document.createElement('canvas')
+      c.width = IMG_W
+      c.height = IMG_H * 2
+      const ctx = c.getContext('2d')!
+      ctx.fillStyle = '#000'
+      ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
+      ctx.drawImage(img, 0, 0, IMG_W, IMG_H * 2)
+      resolve(c)
+    }
+    img.onerror = () => resolve(null)
+    img.src = url
+  })
+}
+
+function renderCanvasImages(templateId: string): [string, string] {
   const canvas = document.createElement('canvas')
   canvas.width = IMG_W
   canvas.height = IMG_H * 2

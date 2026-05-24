@@ -157,7 +157,7 @@ export class G2Display {
   }
 
   private async _sendQuestImages(templateId: string): Promise<void> {
-    const [topData, botData] = renderQuestImages(templateId)
+    const [topData, botData] = await renderQuestImages(templateId)
     await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 2, containerName: 'img-top', imageData: topData }))
     await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 3, containerName: 'img-bot', imageData: botData }))
   }
