@@ -17,7 +17,7 @@ export interface QuestCardInfo {
 export async function renderQuestImages(
   templateId: string,
   info?: QuestCardInfo,
-): Promise<[number[], number[]]> {
+): Promise<[string, string]> {
   const canvas = document.createElement('canvas')
   canvas.width = IMG_W
   canvas.height = IMG_H * 2
@@ -37,18 +37,18 @@ export async function renderQuestImages(
   if (info) drawCardOverlay(ctx, info)
 
   return [
-    canvasToPngBytes(canvas, 0, 0, IMG_W, IMG_H),
-    canvasToPngBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
+    canvasToJpegBase64(canvas, 0, 0, IMG_W, IMG_H),
+    canvasToJpegBase64(canvas, 0, IMG_H, IMG_W, IMG_H),
   ]
 }
 
 /** Loads /welcome-images/<rank>.png and splits it into the two containers. */
-export async function renderWelcomeImage(rank: string): Promise<[number[], number[]] | null> {
+export async function renderWelcomeImage(rank: string): Promise<[string, string] | null> {
   const c = await loadImageFile(`/welcome-images/${rank}.png`)
   if (!c) return null
   return [
-    canvasToPngBytes(c, 0, 0, IMG_W, IMG_H),
-    canvasToPngBytes(c, 0, IMG_H, IMG_W, IMG_H),
+    canvasToJpegBase64(c, 0, 0, IMG_W, IMG_H),
+    canvasToJpegBase64(c, 0, IMG_H, IMG_W, IMG_H),
   ]
 }
 
@@ -96,30 +96,27 @@ function loadImageFile(url: string): Promise<HTMLCanvasElement | null> {
   })
 }
 
-/** Extracts a region, quantizes it to 16 gray levels (simple scheme, small PNG),
- *  encodes as PNG, and returns the raw PNG file bytes as number[] — the
- *  SDK-recommended format that the host image decoder can read. */
-function canvasToPngBytes(src: HTMLCanvasElement, sx: number, sy: number, w: number, h: number): number[] {
+/** Extracts a region, quantizes to 16 gray levels and encodes as JPEG (small,
+ *  universally supported). Returns base64 string — no data-URL prefix — ready
+ *  for imageData in ImageRawDataUpdate. */
+function canvasToJpegBase64(src: HTMLCanvasElement, sx: number, sy: number, w: number, h: number): string {
   const c = document.createElement('canvas')
   c.width = w; c.height = h
   const ctx = c.getContext('2d')!
   ctx.drawImage(src, sx, sy, w, h, 0, 0, w, h)
 
-  // Quantize to 16 gray levels → simple, single-color scheme, highly compressible
+  // Quantize to 16 gray levels (simple scheme, small payload)
   const img = ctx.getImageData(0, 0, w, h)
   const d = img.data
   for (let i = 0; i < d.length; i += 4) {
     const lum = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
-    const g = Math.round(lum / 17) * 17  // 16 evenly-spaced levels (0..255)
+    const g = Math.round(lum / 17) * 17
     d[i] = d[i + 1] = d[i + 2] = g
     d[i + 3] = 255
   }
   ctx.putImageData(img, 0, 0)
 
-  const bin = atob(c.toDataURL('image/png').split(',')[1])
-  const bytes = new Array<number>(bin.length)
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  return bytes
+  return c.toDataURL('image/jpeg', 0.7).split(',')[1]
 }
 
 // ── Silhouette primitives ──────────────────────────────────────────────────────

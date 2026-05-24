@@ -20,7 +20,7 @@ const TEXT_X = IMG_W        // text container starts after image
 const TEXT_W = W - IMG_W    // 396px → ~19 chars per line
 const SHORT_LINE = '───────────────────'  // fits in narrow text container
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v1.9.2'
+export const VERSION = 'v1.9.3'
 
 
 function truncate(text: string, maxLen: number): string {
@@ -104,7 +104,7 @@ export class G2Display {
       this.lastContent = content
       await this._rebuildWithImages(content)
       // Let the container layout settle before pushing image bytes
-      await new Promise(r => setTimeout(r, 250))
+      await new Promise(r => setTimeout(r, 800))
       await this._sendImages(topData, botData)
       this.lastImageTemplateId = q.id
     } else {
@@ -158,8 +158,10 @@ export class G2Display {
     })
   }
 
-  private async _sendImages(topData: number[], botData: number[]): Promise<void> {
+  private async _sendImages(topData: string, botData: string): Promise<void> {
     await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 2, containerName: 'img-top', imageData: topData }))
+    // small pause so real BLE glasses can finish processing the first image
+    await new Promise(r => setTimeout(r, 300))
     await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 3, containerName: 'img-bot', imageData: botData }))
   }
 
@@ -188,7 +190,7 @@ export class G2Display {
       this.inImageMode = true
       this.lastContent = content
       await this._rebuildWithImages(content)
-      await new Promise(r => setTimeout(r, 250))
+      await new Promise(r => setTimeout(r, 800))
       await this._sendImages(imgs[0], imgs[1])
       this.lastImageTemplateId = imageKey
     } else {
