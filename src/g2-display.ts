@@ -20,7 +20,7 @@ const TEXT_X = IMG_W        // text container starts after image
 const TEXT_W = W - IMG_W    // 396px → ~19 chars per line
 const SHORT_LINE = '───────────────────'  // fits in narrow text container
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v1.9.1'
+export const VERSION = 'v1.9.2'
 
 
 function truncate(text: string, maxLen: number): string {

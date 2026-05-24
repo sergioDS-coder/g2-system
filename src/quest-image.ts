@@ -37,8 +37,8 @@ export async function renderQuestImages(
   if (info) drawCardOverlay(ctx, info)
 
   return [
-    canvasToGray4(canvas, 0, 0, IMG_W, IMG_H),
-    canvasToGray4(canvas, 0, IMG_H, IMG_W, IMG_H),
+    canvasToPngBytes(canvas, 0, 0, IMG_W, IMG_H),
+    canvasToPngBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
   ]
 }
 
@@ -47,8 +47,8 @@ export async function renderWelcomeImage(rank: string): Promise<[number[], numbe
   const c = await loadImageFile(`/welcome-images/${rank}.png`)
   if (!c) return null
   return [
-    canvasToGray4(c, 0, 0, IMG_W, IMG_H),
-    canvasToGray4(c, 0, IMG_H, IMG_W, IMG_H),
+    canvasToPngBytes(c, 0, 0, IMG_W, IMG_H),
+    canvasToPngBytes(c, 0, IMG_H, IMG_W, IMG_H),
   ]
 }
 
@@ -96,21 +96,29 @@ function loadImageFile(url: string): Promise<HTMLCanvasElement | null> {
   })
 }
 
-/** Extracts a region and encodes it as packed gray4 bytes (2px/byte, MSB=first pixel).
- *  Returns number[] — the SDK-recommended format for updateImageRawData. */
-function canvasToGray4(src: HTMLCanvasElement, sx: number, sy: number, w: number, h: number): number[] {
+/** Extracts a region, quantizes it to 16 gray levels (simple scheme, small PNG),
+ *  encodes as PNG, and returns the raw PNG file bytes as number[] — the
+ *  SDK-recommended format that the host image decoder can read. */
+function canvasToPngBytes(src: HTMLCanvasElement, sx: number, sy: number, w: number, h: number): number[] {
   const c = document.createElement('canvas')
   c.width = w; c.height = h
-  c.getContext('2d')!.drawImage(src, sx, sy, w, h, 0, 0, w, h)
-  const rgba = c.getContext('2d')!.getImageData(0, 0, w, h).data
-  const bytes: number[] = []
-  const total = w * h
-  for (let i = 0; i < total; i += 2) {
-    const a = i * 4, b = (i + 1) * 4
-    const l1 = Math.round((rgba[a] * 299 + rgba[a + 1] * 587 + rgba[a + 2] * 114) / 255000 * 15)
-    const l2 = (i + 1 < total) ? Math.round((rgba[b] * 299 + rgba[b + 1] * 587 + rgba[b + 2] * 114) / 255000 * 15) : 0
-    bytes.push((l1 << 4) | (l2 & 0xF))
+  const ctx = c.getContext('2d')!
+  ctx.drawImage(src, sx, sy, w, h, 0, 0, w, h)
+
+  // Quantize to 16 gray levels → simple, single-color scheme, highly compressible
+  const img = ctx.getImageData(0, 0, w, h)
+  const d = img.data
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
+    const g = Math.round(lum / 17) * 17  // 16 evenly-spaced levels (0..255)
+    d[i] = d[i + 1] = d[i + 2] = g
+    d[i + 3] = 255
   }
+  ctx.putImageData(img, 0, 0)
+
+  const bin = atob(c.toDataURL('image/png').split(',')[1])
+  const bytes = new Array<number>(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
   return bytes
 }
 
