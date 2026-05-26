@@ -1,3 +1,5 @@
 node_modules/
-dist/
+dist/quest-images/
+dist/welcome-images/
 src/*.js
+.env
