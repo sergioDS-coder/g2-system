@@ -566,12 +566,19 @@ export class G2Display {
       LINE,
     ]
 
-    pageItems.forEach((e, i) => {
-      const pos = (start + i + 1).toString().padStart(2)
-      const name = truncate(e.name, 12)
-      const cursor = i === selectedIdx ? '▶' : ' '
-      lines.push(`${cursor} ${pos}. ${pad(name, 12)} Lv${e.level} ${e.rank}`)
-    })
+    if (entries.length === 0) {
+      lines.push(' No connection.')
+      lines.push(' Check network or')
+      lines.push(' Netlify env vars:')
+      lines.push(' VITE_SUPABASE_URL')
+    } else {
+      pageItems.forEach((e, i) => {
+        const pos = (start + i + 1).toString().padStart(2)
+        const name = truncate(e.name, 12)
+        const cursor = i === selectedIdx ? '▶' : ' '
+        lines.push(`${cursor} ${pos}. ${pad(name, 12)} Lv${e.level} ${e.rank}`)
+      })
+    }
 
     lines.push(LINE)
     lines.push(`${c(itemsPerPage)} Back to Profile`)

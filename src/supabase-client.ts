@@ -35,6 +35,13 @@ export class SupabaseClient {
   constructor(url: string, anonKey: string) {
     this.url = url ? url.replace(/\/$/, '') : ''
     this.key = anonKey ?? ''
+    if (!this.url || !this.key) {
+      console.warn('SupabaseClient: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY not set — ranking and sync disabled')
+    }
+  }
+
+  private isConfigured(): boolean {
+    return !!(this.url && this.key)
   }
 
   private headers() {
@@ -49,6 +56,7 @@ export class SupabaseClient {
   // ─── Sincronizza profilo player ──────────────────────────────────────────
 
   async upsertPlayer(player: PlayerProfile): Promise<boolean> {
+    if (!this.isConfigured()) return false
     if (player.privacy === 'private') return true  // non sincronizza
 
     const row: SupabasePlayerRow = {
@@ -87,6 +95,7 @@ export class SupabaseClient {
   // ─── Recupera top 50 classifica ──────────────────────────────────────────
 
   async getRanking(limit = 50): Promise<RankingEntry[]> {
+    if (!this.isConfigured()) return []
     try {
       const response = await fetch(
         `${this.url}/rest/v1/players?select=*&privacy=in.(public,anonymous)&order=exp_total.desc&limit=${limit}`,
