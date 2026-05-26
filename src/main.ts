@@ -1,4 +1,4 @@
-// main.ts — G2 System v1.4.1
+// main.ts — G2 System v2.0.0
 
 import {
   waitForEvenAppBridge,
