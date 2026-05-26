@@ -464,8 +464,7 @@ async function handleSwipeDown() {
 }
 
 async function handleDoublePress() {
-  if (currentScreen === 'questList') await bridge.shutDownPageContainer(1)
-  else await bridge.shutDownPageContainer(0)
+  await bridge.shutDownPageContainer(1)
 }
 
 main().catch(async (err) => {
