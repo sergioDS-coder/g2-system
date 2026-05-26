@@ -224,7 +224,7 @@ async function goToProfile() {
 async function goToRanking() {
   currentScreen = 'ranking'; rankingPage = 0; rankingIdx = 0
   ranking = await supabase.getRanking(50)
-  await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
+  await display.update(display.buildRanking(ranking, rankingPage, rankingIdx, supabase.lastRankingError))
 }
 
 // ─── Quest ────────────────────────────────────────────────────────────────────

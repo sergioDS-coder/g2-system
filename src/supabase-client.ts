@@ -31,6 +31,7 @@ export interface RankingEntry {
 export class SupabaseClient {
   private url: string
   private key: string
+  public lastRankingError: string | null = null
 
   constructor(url: string, anonKey: string) {
     this.url = url ? url.replace(/\/$/, '') : ''
@@ -95,13 +96,20 @@ export class SupabaseClient {
   // ─── Recupera top 50 classifica ──────────────────────────────────────────
 
   async getRanking(limit = 50): Promise<RankingEntry[]> {
-    if (!this.isConfigured()) return []
+    this.lastRankingError = null
+    if (!this.isConfigured()) {
+      this.lastRankingError = 'not_configured'
+      return []
+    }
     try {
       const response = await fetch(
         `${this.url}/rest/v1/players?select=*&privacy=in.(public,anonymous)&order=exp_total.desc&limit=${limit}`,
         { headers: this.headers() }
       )
-      if (!response.ok) return []
+      if (!response.ok) {
+        this.lastRankingError = `http_${response.status}`
+        return []
+      }
 
       const rows = (await response.json()) as SupabasePlayerRow[]
       return rows.map(r => ({
@@ -113,6 +121,7 @@ export class SupabaseClient {
         questsCompleted: r.quests_completed,
       }))
     } catch (err) {
+      this.lastRankingError = 'network_err'
       console.error('Errore fetch ranking:', err)
       return []
     }

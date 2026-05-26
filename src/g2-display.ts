@@ -554,7 +554,7 @@ export class G2Display {
     ].join('\n')
   }
 
-  buildRanking(entries: RankingEntry[], page: number, selectedIdx = 0): string {
+  buildRanking(entries: RankingEntry[], page: number, selectedIdx = 0, debugError?: string | null): string {
     const itemsPerPage = 4
     const start = page * itemsPerPage
     const pageItems = entries.slice(start, start + itemsPerPage)
@@ -567,10 +567,21 @@ export class G2Display {
     ]
 
     if (entries.length === 0) {
-      lines.push(' No connection.')
-      lines.push(' Check network or')
-      lines.push(' Netlify env vars:')
-      lines.push(' VITE_SUPABASE_URL')
+      if (debugError === 'not_configured') {
+        lines.push(' Err: URL/Key missing')
+        lines.push(' Set VITE_SUPABASE_URL')
+        lines.push(' in .env and rebuild')
+      } else if (debugError?.startsWith('http_')) {
+        lines.push(` Err: ${debugError}`)
+        lines.push(' Check RLS policies')
+        lines.push(' or API key in .env')
+      } else if (debugError === 'network_err') {
+        lines.push(' Err: network error')
+        lines.push(' Check device Wi-Fi')
+      } else {
+        lines.push(' No connection.')
+        lines.push(' Check network')
+      }
     } else {
       pageItems.forEach((e, i) => {
         const pos = (start + i + 1).toString().padStart(2)
