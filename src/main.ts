@@ -65,7 +65,7 @@ let questIdx   = 0
 let profileIdx = 0
 let profilePage = 0
 let detailIdx  = 0
-let rankingIdx = 0
+// rankingIdx removed – single press always returns to profile
 let allDoneIdx = 0
 let msgIdx     = 0
 let levelIdx   = 0
@@ -288,9 +288,9 @@ async function goToProfile() {
 }
 
 async function goToRanking() {
-  currentScreen = 'ranking'; rankingPage = 0; rankingIdx = 0
+  currentScreen = 'ranking'; rankingPage = 0
   ranking = await supabase.getRanking(50)
-  await display.update(display.buildRanking(ranking, rankingPage, rankingIdx, supabase.lastRankingError))
+  await display.update(display.buildRanking(ranking, rankingPage, supabase.lastRankingError))
 }
 
 // ─── Quest ────────────────────────────────────────────────────────────────────
@@ -421,7 +421,7 @@ async function handlePress() {
     levelUp: handleLevelUpPress,
     rankUp: async () => { if (rankUpIdx === 1) await bridge.shutDownPageContainer(0); else { pendingRankUp = null; await goToQuestList() } },
     profile: handleProfilePress,
-    ranking: async () => { if (rankingIdx === 4) await goToProfile() },
+    ranking: async () => { await goToProfile() },
     error: async () => { await initialize() },
     artifactReward: handleArtifactRewardPress,
   }
@@ -559,10 +559,8 @@ async function handleSwipeUp() {
     case 'profile':
       if (profilePage === 0 && profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx, profilePage) } break
     case 'ranking':
-      if (rankingIdx > 0) {
-        rankingIdx--; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
-      } else if (rankingPage > 0) {
-        rankingPage--; rankingIdx = 4; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
+      if (rankingPage > 0) {
+        rankingPage--; await display.update(display.buildRanking(ranking, rankingPage, supabase.lastRankingError))
       }
       break
   }
@@ -591,12 +589,9 @@ async function handleSwipeDown() {
     case 'profile':
       if (profilePage === 0 && profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx, profilePage) } break
     case 'ranking': {
-      const itemsPerPage = 4
-      const totalPages = Math.ceil(ranking.length / itemsPerPage)
-      if (rankingIdx < itemsPerPage) {
-        rankingIdx++; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
-      } else if (rankingPage < totalPages - 1) {
-        rankingPage++; rankingIdx = 0; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
+      const totalPages = Math.ceil(ranking.length / 4)
+      if (rankingPage < totalPages - 1) {
+        rankingPage++; await display.update(display.buildRanking(ranking, rankingPage, supabase.lastRankingError))
       }
       break
     }

@@ -610,12 +610,11 @@ export class G2Display {
     ].join('\n')
   }
 
-  buildRanking(entries: RankingEntry[], page: number, selectedIdx = 0, debugError?: string | null): string {
+  buildRanking(entries: RankingEntry[], page: number, debugError?: string | null): string {
     const itemsPerPage = 4
     const start = page * itemsPerPage
     const pageItems = entries.slice(start, start + itemsPerPage)
     const totalPages = Math.max(1, Math.ceil(entries.length / itemsPerPage))
-    const c = (i: number) => i === selectedIdx ? '▶' : ' '
 
     const lines: string[] = [
       `== RANKING (${page + 1}/${totalPages}) ==`,
@@ -642,15 +641,12 @@ export class G2Display {
       pageItems.forEach((e, i) => {
         const pos = (start + i + 1).toString().padStart(2)
         const name = truncate(e.name, 12)
-        const cursor = i === selectedIdx ? '▶' : ' '
-        lines.push(`${cursor} ${pos}. ${pad(name, 12)} Lv${e.level} ${e.rank}`)
+        lines.push(` ${pos}. ${pad(name, 12)} Lv${e.level} ${e.rank}`)
       })
     }
 
     lines.push(LINE)
-    lines.push(`${c(itemsPerPage)} Back to Profile`)
-    lines.push(LINE)
-    lines.push('▲/▼=Nav  [PRESS]=Select')
+    lines.push('▲/▼=Pagina  [P]=Indietro')
     return lines.join('\n')
   }
 
