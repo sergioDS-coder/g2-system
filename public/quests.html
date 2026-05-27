@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>G2 System — Daily Quests</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    body {
+      min-height: 100vh;
+      padding: 20px;
+      color: #00ff41;
+      background: #080808;
+      background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0, 0, 0, 0.08) 3px, rgba(0, 0, 0, 0.08) 4px);
+    }
+
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      padding: 18px 0 28px;
+    }
+
+    .logo {
+      font-size: 1.5rem;
+      font-weight: bold;
+      letter-spacing: 0.45em;
+      color: #00ff41;
+      text-shadow: 0 0 18px #00ff41, 0 0 36px rgba(0, 255, 65, 0.4);
+    }
+
+    .date-label {
+      font-size: 0.72rem;
+      color: #009922;
+      letter-spacing: 0.25em;
+      margin-top: 6px;
+    }
+
+    /* ── Quest card ── */
+    .quest-card {
+      display: flex;
+      border: 1px solid rgba(0, 255, 65, 0.7);
+      background: rgba(0, 12, 4, 0.75);
+      margin-bottom: 20px;
+      position: relative;
+      box-shadow:
+        0 0 18px rgba(0, 255, 65, 0.12),
+        inset 0 0 40px rgba(0, 255, 65, 0.03);
+    }
+
+    .quest-card.completed {
+      border-color: rgba(0, 255, 65, 0.2);
+      opacity: 0.55;
+    }
+
+    /* ── Left icon panel ── */
+    .icon-panel {
+      width: 150px;
+      min-width: 150px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 22px 14px;
+      border-right: 1px solid rgba(0, 255, 65, 0.4);
+      gap: 14px;
+    }
+
+    .icon-wrap {
+      width: 96px;
+      height: 96px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 0 10px rgba(0, 255, 65, 0.8));
+    }
+
+    .icon-wrap svg {
+      width: 88px;
+      height: 88px;
+    }
+
+    .exp-label {
+      text-align: center;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+    }
+
+    .exp-label .exp-val {
+      display: block;
+      font-size: 1rem;
+      font-weight: bold;
+      color: #00ff41;
+      text-shadow: 0 0 10px #00ff41;
+    }
+
+    .exp-label .exp-sub {
+      color: #009922;
+      font-size: 0.65rem;
+      letter-spacing: 0.12em;
+    }
+
+    .status-done {
+      font-size: 0.7rem;
+      letter-spacing: 0.15em;
+      color: #009922;
+      border: 1px solid #009922;
+      padding: 3px 8px;
+    }
+
+    /* ── Right info panel ── */
+    .info-panel {
+      flex: 1;
+      padding: 16px 18px;
+      min-width: 0;
+    }
+
+    .quest-title {
+      text-align: center;
+      font-size: 0.82rem;
+      letter-spacing: 0.18em;
+      color: #00ff41;
+      text-shadow: 0 0 8px rgba(0, 255, 65, 0.5);
+      margin-bottom: 9px;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid rgba(0, 255, 65, 0.35);
+      margin-bottom: 11px;
+    }
+
+    /* Stats grid inside bordered box */
+    .stats-box {
+      border: 1px solid rgba(0, 255, 65, 0.25);
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.8rem;
+    }
+
+    .stat-row .lbl {
+      color: #009922;
+    }
+
+    .stat-row .val {
+      color: #00ff41;
+      font-weight: bold;
+    }
+
+    .quest-desc {
+      font-size: 0.74rem;
+      color: #00bb33;
+      line-height: 1.55;
+    }
+
+    /* Type badge */
+    .type-badge {
+      position: absolute;
+      top: 0;
+      right: 0;
+      font-size: 0.58rem;
+      letter-spacing: 0.14em;
+      padding: 3px 8px;
+    }
+
+    .type-badge.fitness {
+      background: #00ff41;
+      color: #000;
+    }
+
+    .type-badge.mental {
+      background: #00ccff;
+      color: #000;
+    }
+
+    .type-badge.fixed {
+      background: #ffaa00;
+      color: #000;
+    }
+
+    .type-badge.jolly {
+      background: #ff44ff;
+      color: #000;
+    }
+
+    /* Completed tick */
+    .done-mark {
+      position: absolute;
+      top: 7px;
+      left: 9px;
+      font-size: 1rem;
+      color: #00ff41;
+      text-shadow: 0 0 8px #00ff41;
+    }
+
+    /* Navigation */
+    .nav {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .nav a {
+      border: 1px solid rgba(0, 255, 65, 0.5);
+      color: #00ff41;
+      padding: 12px;
+      text-align: center;
+      text-decoration: none;
+      font-size: 0.78rem;
+      letter-spacing: 0.12em;
+      background: rgba(0, 20, 5, 0.4);
+      transition: all 0.2s;
+    }
+
+    .nav a:hover {
+      background: rgba(0, 255, 65, 0.08);
+      box-shadow: 0 0 12px rgba(0, 255, 65, 0.25);
+    }
+
+    .back-link {
+      text-align: center;
+      margin-top: 14px;
+    }
+
+    .back-link a {
+      color: #005518;
+      font-size: 0.73rem;
+      text-decoration: none;
+      letter-spacing: 0.1em;
+    }
+
+    .empty-msg {
+      text-align: center;
+      color: #009922;
+      font-size: 0.82rem;
+      padding: 50px 20px;
+      letter-spacing: 0.1em;
+      line-height: 2;
+      border: 1px solid rgba(0, 255, 65, 0.15);
+    }
+
+    @media (max-width: 460px) {
+      .icon-panel {
+        width: 110px;
+        min-width: 110px;
+        padding: 16px 10px;
+      }
+
+      .icon-wrap {
+        width: 72px;
+        height: 72px;
+      }
+
+      .icon-wrap svg {
+        width: 64px;
+        height: 64px;
+      }
+
+      .quest-title {
+        font-size: 0.72rem;
+      }
+
+      .stat-row {
+        font-size: 0.72rem;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">G2 SYSTEM</div>
+      <div class="date-label" id="dateLabel">— DAILY QUESTS —</div>
+    </div>
+
+    <div id="questList"></div>
+
+    <div class="nav">
+      <a href="/profile.html">◈ PROFILE</a>
+      <a href="/ranking.html">◈ RANKING</a>
+    </div>
+
+    <div class="back-link">
+      <a href="/">← BACK TO APP</a>
+    </div>
+  </div>
+
+  <script>
+    const ICONS = {
+      corsa: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="56" cy="14" r="8" fill="#00ff41" opacity="0.92"/>
+        <line x1="56" y1="22" x2="50" y2="42" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="50" y1="42" x2="32" y2="54" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="50" y1="42" x2="62" y2="58" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="62" y1="58" x2="70" y2="72" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="56" y1="32" x2="42" y2="24" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="56" y1="32" x2="68" y2="26" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="8"  y1="38" x2="28" y2="38" stroke="#00ff41" stroke-width="2" opacity="0.55"/>
+        <line x1="12" y1="46" x2="28" y2="46" stroke="#00ff41" stroke-width="1.5" opacity="0.35"/>
+        <line x1="16" y1="54" x2="30" y2="54" stroke="#00ff41" stroke-width="1" opacity="0.2"/>
+      </svg>`,
+
+      flessioni: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="68" cy="22" r="8" fill="#00ff41" opacity="0.92"/>
+        <line x1="68" y1="30" x2="62" y2="46" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="62" y1="46" x2="36" y2="52" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="36" y1="52" x2="18" y2="64" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="18" y1="64" x2="18" y2="74" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="36" y1="52" x2="40" y2="68" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="68" y1="30" x2="76" y2="44" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="8" y1="74" x2="80" y2="74" stroke="#00ff41" stroke-width="1.5" opacity="0.35"/>
+      </svg>`,
+
+      addominali: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="22" cy="52" r="8" fill="#00ff41" opacity="0.92"/>
+        <path d="M22 60 Q42 70 62 56" stroke="#00ff41" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <line x1="62" y1="56" x2="74" y2="68" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="44" y1="64" x2="44" y2="74" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="22" y1="48" x2="38" y2="32" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="38" y1="32" x2="56" y2="40" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="8" y1="74" x2="80" y2="74" stroke="#00ff41" stroke-width="1.5" opacity="0.35"/>
+      </svg>`,
+
+      plank: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="72" cy="32" r="8" fill="#00ff41" opacity="0.92"/>
+        <line x1="72" y1="40" x2="68" y2="54" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="68" y1="54" x2="20" y2="54" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="20" y1="54" x2="16" y2="66" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="60" y1="54" x2="58" y2="66" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="52" y1="54" x2="50" y2="68" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="72" y1="40" x2="80" y2="52" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="8" y1="68" x2="80" y2="68" stroke="#00ff41" stroke-width="1.5" opacity="0.35"/>
+        <circle cx="8" cy="36" r="2.5" fill="#00ff41" opacity="0.65"/>
+        <circle cx="8" cy="26" r="2.5" fill="#00ff41" opacity="0.4"/>
+        <circle cx="8" cy="16" r="2.5" fill="#00ff41" opacity="0.2"/>
+      </svg>`,
+
+      yoga: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="44" cy="18" r="9" fill="#00ff41" opacity="0.92"/>
+        <line x1="44" y1="27" x2="44" y2="48" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="44" y1="36" x2="26" y2="28" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="44" y1="36" x2="62" y2="28" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M44 48 Q26 55 14 70" stroke="#00ff41" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <path d="M44 48 Q62 55 74 70" stroke="#00ff41" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+        <circle cx="44" cy="44" r="22" stroke="#00ff41" stroke-width="0.8" opacity="0.18" fill="none"/>
+        <circle cx="44" cy="44" r="34" stroke="#00ff41" stroke-width="0.5" opacity="0.08" fill="none"/>
+      </svg>`,
+
+      scale: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polyline points="10,78 10,62 28,62 28,46 46,46 46,30 64,30 64,14 80,14"
+          stroke="#00ff41" stroke-width="3" fill="none" stroke-linejoin="round"/>
+        <polyline points="10,78 28,78 28,62 46,62 46,46 64,46 64,30 80,30 80,14"
+          stroke="#00ff41" stroke-width="1.5" fill="none" stroke-linejoin="round" opacity="0.28"/>
+        <circle cx="58" cy="22" r="6" fill="#00ff41" opacity="0.92"/>
+        <line x1="58" y1="28" x2="56" y2="38" stroke="#00ff41" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="56" y1="38" x2="48" y2="46" stroke="#00ff41" stroke-width="2.5" stroke-linecap="round"/>
+        <line x1="56" y1="38" x2="62" y2="44" stroke="#00ff41" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>`,
+
+      fixed_camminata: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="44" cy="13" r="8" fill="#00ff41" opacity="0.92"/>
+        <line x1="44" y1="21" x2="44" y2="48" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="44" y1="48" x2="30" y2="68" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="44" y1="48" x2="58" y2="64" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="44" y1="34" x2="30" y2="26" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="44" y1="34" x2="58" y2="40" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <circle cx="22" cy="76" r="2.5" fill="#00ff41" opacity="0.65"/>
+        <circle cx="32" cy="76" r="2.5" fill="#00ff41" opacity="0.45"/>
+        <circle cx="44" cy="76" r="2.5" fill="#00ff41" opacity="0.3"/>
+        <circle cx="56" cy="76" r="2.5" fill="#00ff41" opacity="0.45"/>
+        <circle cx="66" cy="76" r="2.5" fill="#00ff41" opacity="0.65"/>
+      </svg>`,
+
+      meditazione: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="44" cy="22" r="9" fill="#00ff41" opacity="0.92"/>
+        <line x1="44" y1="31" x2="44" y2="50" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="44" y1="42" x2="28" y2="34" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="44" y1="42" x2="60" y2="34" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <path d="M44 50 L30 62 L44 58 L58 62 Z" stroke="#00ff41" stroke-width="2" fill="rgba(0,255,65,0.08)"/>
+        <line x1="44" y1="8"  x2="44" y2="2"  stroke="#00ff41" stroke-width="2" opacity="0.55"/>
+        <line x1="56" y1="12" x2="61" y2="7"  stroke="#00ff41" stroke-width="2" opacity="0.45"/>
+        <line x1="64" y1="22" x2="70" y2="19" stroke="#00ff41" stroke-width="2" opacity="0.35"/>
+        <line x1="32" y1="12" x2="27" y2="7"  stroke="#00ff41" stroke-width="2" opacity="0.45"/>
+        <line x1="24" y1="22" x2="18" y2="19" stroke="#00ff41" stroke-width="2" opacity="0.35"/>
+      </svg>`,
+
+      lettura: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M10 20 L10 72 L44 64 L44 20 Z" stroke="#00ff41" stroke-width="2" fill="rgba(0,255,65,0.07)"/>
+        <path d="M78 20 L78 72 L44 64 L44 20 Z" stroke="#00ff41" stroke-width="2" fill="rgba(0,255,65,0.07)"/>
+        <line x1="10" y1="20" x2="44" y2="13" stroke="#00ff41" stroke-width="2"/>
+        <line x1="78" y1="20" x2="44" y2="13" stroke="#00ff41" stroke-width="2"/>
+        <line x1="18" y1="32" x2="38" y2="29" stroke="#00ff41" stroke-width="1.3" opacity="0.65"/>
+        <line x1="18" y1="40" x2="38" y2="37" stroke="#00ff41" stroke-width="1.3" opacity="0.5"/>
+        <line x1="18" y1="48" x2="38" y2="45" stroke="#00ff41" stroke-width="1.3" opacity="0.4"/>
+        <line x1="18" y1="56" x2="32" y2="54" stroke="#00ff41" stroke-width="1.3" opacity="0.3"/>
+        <line x1="50" y1="29" x2="70" y2="32" stroke="#00ff41" stroke-width="1.3" opacity="0.65"/>
+        <line x1="50" y1="37" x2="70" y2="40" stroke="#00ff41" stroke-width="1.3" opacity="0.5"/>
+        <line x1="50" y1="45" x2="70" y2="48" stroke="#00ff41" stroke-width="1.3" opacity="0.4"/>
+        <line x1="50" y1="53" x2="64" y2="56" stroke="#00ff41" stroke-width="1.3" opacity="0.3"/>
+      </svg>`,
+
+      studio: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M44 14 C30 14 18 22 18 36 C18 42 20 47 25 51 C22 53 21 57 22 61 C24 67 30 70 36 67 C38 72 41 76 44 76 C47 76 50 72 52 67 C58 70 64 67 66 61 C67 57 66 53 63 51 C68 47 70 42 70 36 C70 22 58 14 44 14 Z"
+          stroke="#00ff41" stroke-width="2" fill="rgba(0,255,65,0.05)"/>
+        <line x1="44" y1="14" x2="44" y2="76" stroke="#00ff41" stroke-width="1" opacity="0.25"/>
+        <circle cx="44" cy="32" r="4" fill="#00ff41" opacity="0.75"/>
+        <circle cx="32" cy="44" r="3" fill="#00ff41" opacity="0.65"/>
+        <circle cx="56" cy="44" r="3" fill="#00ff41" opacity="0.65"/>
+        <circle cx="36" cy="58" r="3" fill="#00ff41" opacity="0.55"/>
+        <circle cx="52" cy="58" r="3" fill="#00ff41" opacity="0.55"/>
+        <line x1="44" y1="32" x2="32" y2="44" stroke="#00ff41" stroke-width="1.2" opacity="0.45"/>
+        <line x1="44" y1="32" x2="56" y2="44" stroke="#00ff41" stroke-width="1.2" opacity="0.45"/>
+        <line x1="32" y1="44" x2="36" y2="58" stroke="#00ff41" stroke-width="1.2" opacity="0.38"/>
+        <line x1="56" y1="44" x2="52" y2="58" stroke="#00ff41" stroke-width="1.2" opacity="0.38"/>
+        <line x1="36" y1="58" x2="52" y2="58" stroke="#00ff41" stroke-width="1.2" opacity="0.3"/>
+      </svg>`,
+
+      scrittura: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M66 14 L74 22 L32 66 L20 70 L24 58 Z"
+          stroke="#00ff41" stroke-width="2.5" fill="rgba(0,255,65,0.08)" stroke-linejoin="round"/>
+        <line x1="66" y1="14" x2="74" y2="22" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="58" y1="22" x2="66" y2="30" stroke="#00ff41" stroke-width="1.5" opacity="0.45"/>
+        <line x1="12" y1="76" x2="76" y2="76" stroke="#00ff41" stroke-width="1.8" opacity="0.5"/>
+        <line x1="12" y1="62" x2="34" y2="62" stroke="#00ff41" stroke-width="1" opacity="0.22"/>
+        <line x1="12" y1="50" x2="28" y2="50" stroke="#00ff41" stroke-width="1" opacity="0.16"/>
+      </svg>`,
+
+      noscreen: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="10" y="14" width="68" height="44" rx="4"
+          stroke="#00ff41" stroke-width="2.5" fill="rgba(0,255,65,0.05)"/>
+        <rect x="18" y="22" width="52" height="28"
+          fill="rgba(0,255,65,0.06)" stroke="#00ff41" stroke-width="1" opacity="0.4"/>
+        <line x1="34" y1="58" x2="54" y2="58" stroke="#00ff41" stroke-width="2.5"/>
+        <line x1="44" y1="58" x2="44" y2="72" stroke="#00ff41" stroke-width="2.5"/>
+        <line x1="34" y1="72" x2="54" y2="72" stroke="#00ff41" stroke-width="2.5"/>
+        <line x1="26" y1="26" x2="62" y2="54" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="62" y1="26" x2="26" y2="54" stroke="#00ff41" stroke-width="3.5" stroke-linecap="round"/>
+      </svg>`,
+
+      fixed_sonno: `<svg viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M42 12 C26 16 14 30 18 48 C22 66 40 76 56 70 C44 68 30 54 30 38 C30 26 35 16 42 12 Z"
+          stroke="#00ff41" stroke-width="2.5" fill="rgba(0,255,65,0.1)"/>
+        <circle cx="64" cy="18" r="2.5" fill="#00ff41" opacity="0.8"/>
+        <circle cx="72" cy="34" r="2"   fill="#00ff41" opacity="0.6"/>
+        <circle cx="60" cy="46" r="1.5" fill="#00ff41" opacity="0.45"/>
+        <path d="M54 20 L64 20 L54 30 L64 30"
+          stroke="#00ff41" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M64 38 L72 38 L64 46 L72 46"
+          stroke="#00ff41" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+        <path d="M70 54 L76 54 L70 60 L76 60"
+          stroke="#00ff41" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.45"/>
+      </svg>`,
+    }
+
+    const DESCRIPTIONS = {
+      corsa:           'Protocollo cardio ad alta intensità. Potenzia la corsa e le performance cardiovascolari. Bonus AGI.',
+      flessioni:       'Protocollo forza upper body. Bersaglia pettorali, spalle e tricipiti. Bonus STR.',
+      addominali:      'Protocollo core strength. Costruisce resistenza addominale e stabilità. Bonus STR.',
+      plank:           'Protocollo endurance statico. Tensione massima sostenuta nel tempo. Bonus END.',
+      yoga:            'Protocollo flessibilità e bilanciamento. Ripristina VIT e migliora la consapevolezza corporea.',
+      scale:           'Protocollo assalto verticale. Costruisce potenza alle gambe e resistenza. Bonus END.',
+      fixed_camminata: 'Baseline movimento giornaliero. 5000 passi minimi per la manutenzione del sistema. Bonus AGI.',
+      meditazione:     'Protocollo chiarezza mentale. Riduzione dello stress e potenziamento del focus. Bonus VIT.',
+      lettura:         'Protocollo acquisizione conoscenza. Espande l\'attributo INT tramite lettura concentrata.',
+      studio:          'Protocollo deep learning. Allenamento cognitivo ad alta intensità. Bonus INT.',
+      scrittura:       'Protocollo output creativo. Rafforza i percorsi neurali per la crescita INT.',
+      noscreen:        'Protocollo digital detox. Recovery del sistema tramite assenza schermi. Bonus VIT.',
+      fixed_sonno:     'Protocollo recovery. Il sonno rigenera tutti gli stat. Essenziale per VIT.',
+    }
+
+    const NAMES = {
+      corsa:           'CORSA',
+      flessioni:       'FLESSIONI',
+      addominali:      'ADDOMINALI',
+      plank:           'PLANK',
+      yoga:            'YOGA',
+      scale:           'SALITA SCALE',
+      fixed_camminata: 'CAMMINATA',
+      meditazione:     'MEDITAZIONE',
+      lettura:         'LETTURA',
+      studio:          'STUDIO',
+      scrittura:       'SCRITTURA',
+      noscreen:        'SENZA SCHERMI',
+      fixed_sonno:     'SONNO',
+    }
+
+    const ATTRS = { str: 'FORZA', agi: 'AGILITÀ', vit: 'VITALITÀ', int: 'INTELLETTO', end: 'RESISTENZA' }
+    const TYPE_LABELS = { fitness: 'FITNESS', mental: 'MENTAL', fixed: 'FIXED', jolly: 'JOLLY' }
+
+    function formatTarget(amount, unit) {
+      const map = { km: `${amount} km`, reps: `${amount} reps`, min: `${amount} min`, pages: `${amount} pag`, h: `${amount} h`, steps: `${Number(amount).toLocaleString()} steps`, floors: `${amount} piani` }
+      return map[unit] || `${amount} ${unit}`
+    }
+
+    function buildCard(q) {
+      const icon = ICONS[q.templateId] || ICONS['fixed_camminata']
+      const name = q.jollyName ? q.jollyName.toUpperCase() : (NAMES[q.templateId] || q.templateId.toUpperCase())
+      const desc = DESCRIPTIONS[q.templateId] || 'Completa questa quest per guadagnare EXP e punti attributo.'
+      const attr = ATTRS[q.attribute] || q.attribute.toUpperCase()
+      const typeLbl = TYPE_LABELS[q.type] || q.type.toUpperCase()
+      const target = formatTarget(q.amount, q.unit)
+
+      const statusHtml = q.completed
+        ? `<div class="status-done">[COMPLETATA]</div>`
+        : `<div class="exp-label"><span class="exp-val">+${q.expReward}</span><span class="exp-sub">EXP REWARD</span></div>`
+
+      return `
+        <div class="quest-card ${q.completed ? 'completed' : ''}">
+          ${q.completed ? '<div class="done-mark">✓</div>' : ''}
+          <span class="type-badge ${q.type}">${typeLbl}</span>
+          <div class="icon-panel">
+            <div class="icon-wrap">${icon}</div>
+            ${statusHtml}
+          </div>
+          <div class="info-panel">
+            <div class="quest-title">[ ${name} ]</div>
+            <hr class="divider"/>
+            <div class="stats-box">
+              <div class="stat-row"><span class="lbl">Attributo</span><span class="val">${attr}</span></div>
+              <div class="stat-row"><span class="lbl">Obiettivo</span><span class="val">${target}</span></div>
+              <div class="stat-row"><span class="lbl">Ricompensa</span><span class="val">${q.expReward} EXP</span></div>
+              <div class="stat-row"><span class="lbl">Stato</span><span class="val">${q.completed ? 'COMPLETATA' : 'IN ATTESA'}</span></div>
+            </div>
+            <div class="quest-desc">${desc}</div>
+          </div>
+        </div>`
+    }
+
+    function load() {
+      const today = new Date().toISOString().split('T')[0]
+      document.getElementById('dateLabel').textContent = `— ${today} —`
+
+      const raw = localStorage.getItem('g2sys_quests')
+      if (!raw) {
+        document.getElementById('questList').innerHTML =
+          '<div class="empty-msg">[ NESSUNA QUEST ATTIVA ]<br/>Apri l\'app per generare le quest di oggi.</div>'
+        return
+      }
+
+      let quests = JSON.parse(raw).filter(q => q.date === today)
+      if (!quests.length) {
+        document.getElementById('questList').innerHTML =
+          '<div class="empty-msg">[ NESSUNA QUEST PER OGGI ]<br/>Apri l\'app per generare le quest giornaliere.</div>'
+        return
+      }
+
+      quests.sort((a, b) => a.completed - b.completed)
+      document.getElementById('questList').innerHTML = quests.map(buildCard).join('')
+    }
+
+    load()
+  </script>
+</body>
+
+</html>

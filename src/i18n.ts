@@ -71,9 +71,24 @@ export interface Translations {
   attrVit: string
   attrInt: string
   attrEnd: string
-  classFighter: string
-  classMage: string
+  classCombattente: string
+  classCarroArmato: string
+  classAssassino: string
+  classMago: string
   classRanger: string
+  classGuaritore: string
+  artifact: string
+  artifactGauntletsWarrior: string
+  artifactShadowCloak: string
+  artifactAncientTome: string
+  artifactIronShield: string
+  artifactDualScope: string
+  artifactElixirFlask: string
+  artifactExpCrystal: string
+  artifactEnduranceRing: string
+  artifactFocusStone: string
+  noArtifacts: string
+  jollyReward: string
   questOf: string
   selectLanguage: string
   selectPrivacy: string
@@ -139,9 +154,24 @@ const it: Translations = {
   attrVit: 'VIT',
   attrInt: 'INT',
   attrEnd: 'RES',
-  classFighter: 'Guerriero',
-  classMage: 'Mago',
+  classCombattente: 'Combattente',
+  classCarroArmato: 'Carro Armato',
+  classAssassino: 'Assassino',
+  classMago: 'Mago',
   classRanger: 'Ranger',
+  classGuaritore: 'Guaritore',
+  artifact: 'Artefatto',
+  artifactGauntletsWarrior: 'Guanti del Guerriero',
+  artifactShadowCloak: 'Mantello Oscuro',
+  artifactAncientTome: 'Tomo Antico',
+  artifactIronShield: 'Scudo di Ferro',
+  artifactDualScope: 'Mirino Duale',
+  artifactElixirFlask: 'Fiala Elisir',
+  artifactExpCrystal: 'Cristallo EXP',
+  artifactEnduranceRing: 'Anello Resistenza',
+  artifactFocusStone: 'Pietra Focale',
+  noArtifacts: 'Nessun artefatto',
+  jollyReward: 'MISSIONE JOLLY!',
   questOf: 'di',
   selectLanguage: 'Seleziona lingua:',
   selectPrivacy: 'Privacy classifica:',
@@ -207,9 +237,24 @@ const en: Translations = {
   attrVit: 'VIT',
   attrInt: 'INT',
   attrEnd: 'END',
-  classFighter: 'Fighter',
-  classMage: 'Mage',
+  classCombattente: 'Fighter',
+  classCarroArmato: 'Tank',
+  classAssassino: 'Assassin',
+  classMago: 'Mage',
   classRanger: 'Ranger',
+  classGuaritore: 'Healer',
+  artifact: 'Artifact',
+  artifactGauntletsWarrior: 'Warrior Gauntlets',
+  artifactShadowCloak: 'Shadow Cloak',
+  artifactAncientTome: 'Ancient Tome',
+  artifactIronShield: 'Iron Shield',
+  artifactDualScope: 'Dual Scope',
+  artifactElixirFlask: 'Elixir Flask',
+  artifactExpCrystal: 'EXP Crystal',
+  artifactEnduranceRing: 'Endurance Ring',
+  artifactFocusStone: 'Focus Stone',
+  noArtifacts: 'No artifacts',
+  jollyReward: 'JOLLY MISSION!',
   questOf: 'of',
   selectLanguage: 'Select language:',
   selectPrivacy: 'Ranking privacy:',

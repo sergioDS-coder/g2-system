@@ -1,0 +1,4 @@
+node_modules/
+dist/quest-images/
+dist/welcome-images/
+src/*.js
