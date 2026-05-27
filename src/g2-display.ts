@@ -17,6 +17,7 @@ import type { RankingEntry } from './supabase-client'
 import type { Lang } from './i18n'
 import { t } from './i18n'
 import { renderQuestImages, renderWelcomeImage, type QuestCardInfo, IMG_W, IMG_H } from './quest-image'
+import { renderArtifactImage, ART_IMG_W, ART_IMG_H } from './artifact-image'
 
 const W = 576
 const H = 288
@@ -25,7 +26,7 @@ const TEXT_X = IMG_W        // text container starts after image
 const TEXT_W = W - IMG_W    // 396px → ~19 chars per line
 const SHORT_LINE = '───────────────────'  // fits in narrow text container
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v1.9.0'
+export const VERSION = 'v2.0.1'
 
 
 function truncate(text: string, maxLen: number): string {
@@ -641,6 +642,45 @@ export class G2Display {
     lines.push(LINE)
     lines.push('▲/▼=Nav  [PRESS]=Select')
     return lines.join('\n')
+  }
+
+  async showArtifactReward(artifactId: ArtifactId): Promise<void> {
+    if (!this.initialized) return
+    const content = this.buildArtifactRewardNarrow(artifactId)
+    const imgData = await renderArtifactImage(artifactId)
+
+    if (!this.inImageMode) {
+      this.inImageMode = true
+      this.lastContent = content
+      const ok = await this._rebuildWithImages(content)
+      if (ok) {
+        await this.bridge.updateImageRawData(new ImageRawDataUpdate({
+          containerID: 2, containerName: 'img-top', imageData: imgData.slice(0, ART_IMG_W * 144),
+        }))
+        await this.bridge.updateImageRawData(new ImageRawDataUpdate({
+          containerID: 3, containerName: 'img-bot', imageData: imgData.slice(ART_IMG_W * 144),
+        }))
+      }
+    } else {
+      this.lastContent = content
+      await this.update(content)
+    }
+  }
+
+  buildArtifactRewardNarrow(artifactId: ArtifactId): string {
+    const tr = t(this.lang)
+    const nameKey = ('artifact' + artifactId.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('')) as keyof typeof tr
+    const displayName = (tr as any)[nameKey] ?? artifactId
+    return [
+      '★ ' + tr.jollyReward,
+      SHORT_LINE,
+      '',
+      tr.artifact + ':',
+      truncate(displayName, 18),
+      '',
+      SHORT_LINE,
+      tr.pressToContinue,
+    ].join('\n')
   }
 
   buildArtifactReward(artifactId: ArtifactId): string {

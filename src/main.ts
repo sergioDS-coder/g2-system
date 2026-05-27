@@ -335,7 +335,7 @@ async function completeQuest() {
       pendingLevelUp = result.leveledUp ? { oldLevel: result.oldLevel } : pendingLevelUp
       pendingRankUp = result.rankedUp ? { oldRank: result.oldRank } : pendingRankUp
       artifactIdx = 0; currentScreen = 'artifactReward'
-      await display.update(display.buildArtifactReward(rolled))
+      await display.showArtifactReward(rolled)
       return
     }
   }
