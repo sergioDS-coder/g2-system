@@ -2,7 +2,6 @@ import {
   TextContainerProperty,
   ImageContainerProperty,
   ImageRawDataUpdate,
-  ImageRawDataUpdateResult,
   CreateStartUpPageContainer,
   RebuildPageContainer,
   TextContainerUpgrade,
@@ -17,7 +16,7 @@ import type { RankingEntry } from './supabase-client'
 import type { Lang } from './i18n'
 import { t } from './i18n'
 import { renderQuestImages, renderWelcomeImage, renderWildQuestImage, type QuestCardInfo, IMG_W, IMG_H } from './quest-image'
-import { renderArtifactImage, renderClassImage, ART_IMG_W, ART_IMG_H } from './artifact-image'
+import { renderArtifactImage, renderClassImage } from './artifact-image'
 
 const W = 576
 const H = 288
@@ -100,36 +99,7 @@ export class G2Display {
   async showQuestList(quests: DailyQuest[], selectedIdx: number): Promise<void> {
     if (!this.initialized) return
     const content = this.buildQuestListNarrow(quests, selectedIdx)
-    const [topData, botData] = await renderWildQuestImage()
-    const imageKey = 'wild_quest'
-
-    if (!this.inImageMode) {
-      this.inImageMode = true
-      this.lastContent = content
-      const ok = await this._rebuildWithImages(content)
-      if (ok) {
-        const [r1, r2] = await this._sendImages(topData, botData)
-        this.lastImageTemplateId = imageKey
-        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
-      }
-    } else {
-      if (content !== this.lastContent) {
-        this.lastContent = content
-        try {
-          await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
-            containerID: 1, containerName: 'main',
-            content, contentOffset: 0, contentLength: content.length,
-          }))
-        } catch {
-          await this._rebuildWithImages(content)
-        }
-      }
-      if (this.lastImageTemplateId !== imageKey) {
-        const [r1, r2] = await this._sendImages(topData, botData)
-        this.lastImageTemplateId = imageKey
-        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
-      }
-    }
+    await this._renderImageScreen(content, 'wild_quest', () => renderWildQuestImage())
   }
 
   /** Quest list text for narrow right column (~19 chars/line) */
@@ -160,35 +130,7 @@ export class G2Display {
   async showQuestDetail(q: DailyQuest, selectedIdx = 0): Promise<void> {
     if (!this.initialized) return
     const content = this.buildQuestDetailNarrow(q, selectedIdx)
-    const [topData, botData] = await renderQuestImages(q.templateId, this._questCardInfo(q))
-
-    if (!this.inImageMode) {
-      this.inImageMode = true
-      this.lastContent = content
-      const ok = await this._rebuildWithImages(content)
-      if (ok) {
-        const [r1, r2] = await this._sendImages(topData, botData)
-        this.lastImageTemplateId = q.id
-        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
-      }
-    } else {
-      if (content !== this.lastContent) {
-        this.lastContent = content
-        try {
-          await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
-            containerID: 1, containerName: 'main',
-            content, contentOffset: 0, contentLength: content.length,
-          }))
-        } catch {
-          await this._rebuildWithImages(content)
-        }
-      }
-      if (this.lastImageTemplateId !== q.id) {
-        const [r1, r2] = await this._sendImages(topData, botData)
-        this.lastImageTemplateId = q.id
-        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
-      }
-    }
+    await this._renderImageScreen(content, q.id, () => renderQuestImages(q.templateId, this._questCardInfo(q)))
   }
 
   private async _rebuildFullWidth(content: string): Promise<void> {
@@ -217,32 +159,48 @@ export class G2Display {
     }))
   }
 
-  private async _sendImages(top: number[], bot: number[]): Promise<[ImageRawDataUpdateResult, ImageRawDataUpdateResult]> {
-    const r1 = await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 2, containerName: 'img-top', imageData: top }))
-    const r2 = await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 3, containerName: 'img-bot', imageData: bot }))
-    return [r1, r2]
+  private async _sendImages(top: number[], bot: number[]): Promise<void> {
+    await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 2, containerName: 'img-top', imageData: top }))
+    await this.bridge.updateImageRawData(new ImageRawDataUpdate({ containerID: 3, containerName: 'img-bot', imageData: bot }))
   }
 
-  /** Appends image-send diagnostic to the text panel so we can read it on the glasses. */
-  private async _showImgDiag(
+  /** Unified image-screen renderer. The text update is fast and always applied;
+   *  the heavy PNG encode (renderImages) runs ONLY when the image actually changes,
+   *  so in-screen navigation (swipe) is a text-only update and stays responsive. */
+  private async _renderImageScreen(
     content: string,
-    r1: ImageRawDataUpdateResult, r2: ImageRawDataUpdateResult,
-    len1: number, len2: number,
+    imageKey: string,
+    renderImages: () => Promise<[number[], number[]]>,
   ): Promise<void> {
-    const code = (r: ImageRawDataUpdateResult) =>
-      ImageRawDataUpdateResult.isSuccess(r) ? 'OK' :
-      ImageRawDataUpdateResult.isImageSizeInvalid(r) ? 'SIZE' :
-      ImageRawDataUpdateResult.isImageToGray4Failed(r) ? 'GRAY4' :
-      ImageRawDataUpdateResult.isSendFailed(r) ? 'SEND' : 'ERR'
-    const kb = (n: number) => (n / 1024).toFixed(1)
-    const diag = `${content}\n─\nIMG:${code(r1)} ${code(r2)}\n${kb(len1)}+${kb(len2)}KB`
-    this.lastContent = diag
-    try {
-      await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
-        containerID: 1, containerName: 'main',
-        content: diag, contentOffset: 0, contentLength: diag.length,
-      }))
-    } catch { /* ignore */ }
+    if (!this.inImageMode) {
+      this.inImageMode = true
+      this.lastContent = content
+      const ok = await this._rebuildWithImages(content)
+      if (ok) {
+        const [top, bot] = await renderImages()
+        await this._sendImages(top, bot)
+        this.lastImageTemplateId = imageKey
+      }
+      return
+    }
+
+    if (content !== this.lastContent) {
+      this.lastContent = content
+      try {
+        await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
+          containerID: 1, containerName: 'main',
+          content, contentOffset: 0, contentLength: content.length,
+        }))
+      } catch {
+        await this._rebuildWithImages(content)
+      }
+    }
+
+    if (this.lastImageTemplateId !== imageKey) {
+      const [top, bot] = await renderImages()
+      await this._sendImages(top, bot)
+      this.lastImageTemplateId = imageKey
+    }
   }
 
   private _questCardInfo(q: DailyQuest): QuestCardInfo {
@@ -262,86 +220,19 @@ export class G2Display {
   async showDailyMessage(rank: Rank, level: number, selectedIdx = 0): Promise<void> {
     if (!this.initialized) return
     const content = this.buildDailyMessageNarrow(rank, level, selectedIdx)
-    const imgs = await renderWelcomeImage(rank)
-
-    const imageKey = 'welcome_' + rank
-    if (!this.inImageMode) {
-      this.inImageMode = true
-      this.lastContent = content
-      const ok = await this._rebuildWithImages(content)
-      if (ok) {
-        const [r1, r2] = await this._sendImages(imgs[0], imgs[1])
-        this.lastImageTemplateId = imageKey
-        await this._showImgDiag(content, r1, r2, imgs[0].length, imgs[1].length)
-      }
-    } else {
-      if (content !== this.lastContent) {
-        this.lastContent = content
-        try {
-          await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
-            containerID: 1, containerName: 'main',
-            content, contentOffset: 0, contentLength: content.length,
-          }))
-        } catch {
-          await this._rebuildWithImages(content)
-        }
-      }
-      if (this.lastImageTemplateId !== imageKey) {
-        const [r1, r2] = await this._sendImages(imgs[0], imgs[1])
-        this.lastImageTemplateId = imageKey
-        await this._showImgDiag(content, r1, r2, imgs[0].length, imgs[1].length)
-      }
-    }
+    await this._renderImageScreen(content, 'welcome_' + rank, () => renderWelcomeImage(rank))
   }
 
   /** Profile screen: class icon on the left (or rank card if no class) + stats on the right */
   async showProfile(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0): Promise<void> {
     if (!this.initialized) return
     const content = this.buildProfileNarrow(player, rankPosition, selectedIdx)
-
-    let topData: number[]
-    let botData: number[]
-    let imageKey: string
-
-    if (player.playerClass) {
-      const [top, bot] = await renderClassImage(player.playerClass)
-      topData = top
-      botData = bot
-      imageKey = 'class_' + player.playerClass
-    } else {
-      const rankImgs = await renderWelcomeImage(player.rank)
-      topData = rankImgs[0]
-      botData = rankImgs[1]
-      imageKey = 'rank_' + player.rank
-    }
-
-    if (!this.inImageMode) {
-      this.inImageMode = true
-      this.lastContent = content
-      const ok = await this._rebuildWithImages(content)
-      if (ok) {
-        const [r1, r2] = await this._sendImages(topData, botData)
-        this.lastImageTemplateId = imageKey
-        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
-      }
-    } else {
-      if (content !== this.lastContent) {
-        this.lastContent = content
-        try {
-          await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
-            containerID: 1, containerName: 'main',
-            content, contentOffset: 0, contentLength: content.length,
-          }))
-        } catch {
-          await this._rebuildWithImages(content)
-        }
-      }
-      if (this.lastImageTemplateId !== imageKey) {
-        const [r1, r2] = await this._sendImages(topData, botData)
-        this.lastImageTemplateId = imageKey
-        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
-      }
-    }
+    const cls = player.playerClass
+    const imageKey = cls ? 'class_' + cls : 'rank_' + player.rank
+    const renderImages = cls
+      ? () => renderClassImage(cls)
+      : () => renderWelcomeImage(player.rank)
+    await this._renderImageScreen(content, imageKey, renderImages)
   }
 
   /** Narrow greeting text (right of the rank image, ~19 chars/line) */
@@ -736,31 +627,7 @@ export class G2Display {
   async showArtifactReward(artifactId: ArtifactId): Promise<void> {
     if (!this.initialized) return
     const content = this.buildArtifactRewardNarrow(artifactId)
-    const [imgTop, imgBot] = await renderArtifactImage(artifactId)
-
-    if (!this.inImageMode) {
-      this.inImageMode = true
-      this.lastContent = content
-      const ok = await this._rebuildWithImages(content)
-      if (ok) {
-        const [r1, r2] = await this._sendImages(imgTop, imgBot)
-        await this._showImgDiag(content, r1, r2, imgTop.length, imgBot.length)
-      }
-    } else {
-      if (content !== this.lastContent) {
-        this.lastContent = content
-        try {
-          await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
-            containerID: 1, containerName: 'main',
-            content, contentOffset: 0, contentLength: content.length,
-          }))
-        } catch {
-          await this._rebuildWithImages(content)
-        }
-      }
-      const [r1, r2] = await this._sendImages(imgTop, imgBot)
-      await this._showImgDiag(content, r1, r2, imgTop.length, imgBot.length)
-    }
+    await this._renderImageScreen(content, 'artifact_' + artifactId, () => renderArtifactImage(artifactId))
   }
 
   buildArtifactRewardNarrow(artifactId: ArtifactId): string {

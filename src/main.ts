@@ -73,6 +73,7 @@ let rankUpIdx  = 0
 let warningIdx = 0
 
 let selectedRankingEntry: RankingEntry | null = null
+let handlingInput = false
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -395,18 +396,27 @@ function setupEventListener() {
       OsEventTypeList.SYSTEM_EXIT_EVENT,
     ].includes(eventType)) return
 
-    switch (eventType) {
-      case OsEventTypeList.CLICK_EVENT:
-      case 0:
-      case undefined:
-      case null:
-        await handlePress(); break
-      case OsEventTypeList.DOUBLE_CLICK_EVENT:
-        await handleDoublePress(); break
-      case OsEventTypeList.SCROLL_TOP_EVENT:
-        await handleSwipeUp(); break
-      case OsEventTypeList.SCROLL_BOTTOM_EVENT:
-        await handleSwipeDown(); break
+    // Serialize input: while one event is being handled, drop any others.
+    // This prevents rapid ring presses from queuing up and firing in a burst
+    // (which would skip past the menu the user actually wanted).
+    if (handlingInput) return
+    handlingInput = true
+    try {
+      switch (eventType) {
+        case OsEventTypeList.CLICK_EVENT:
+        case 0:
+        case undefined:
+        case null:
+          await handlePress(); break
+        case OsEventTypeList.DOUBLE_CLICK_EVENT:
+          await handleDoublePress(); break
+        case OsEventTypeList.SCROLL_TOP_EVENT:
+          await handleSwipeUp(); break
+        case OsEventTypeList.SCROLL_BOTTOM_EVENT:
+          await handleSwipeDown(); break
+      }
+    } finally {
+      handlingInput = false
     }
   })
 }
