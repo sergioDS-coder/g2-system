@@ -1,7 +1,7 @@
 // artifact-image.ts — Artifact and class icon rendering for G2 image containers
 // Loads PNG from /artifact-images/<id>.png or /class-images/<id>.png
 // Falls back to a simple glyph if file not found.
-// Output: single 180×288 container (full height, image centred vertically)
+// Output: two 180×144 PNG-encoded halves (top + bottom), matching SDK format.
 
 export const ART_IMG_W = 180
 export const ART_IMG_H = 288
@@ -15,20 +15,31 @@ async function loadImageFile(src: string): Promise<HTMLImageElement | null> {
   })
 }
 
-function canvasToBytes(canvas: HTMLCanvasElement): number[] {
-  const ctx = canvas.getContext('2d')!
-  const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-  const bytes: number[] = []
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i], g = data[i + 1], b = data[i + 2]
-    const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
-    bytes.push(gray)
+function canvasHalfToPng(canvas: HTMLCanvasElement, sy: number): number[] {
+  const halfH = ART_IMG_H / 2
+  const c = document.createElement('canvas')
+  c.width = ART_IMG_W
+  c.height = halfH
+  const ctx = c.getContext('2d')!
+  ctx.drawImage(canvas, 0, sy, ART_IMG_W, halfH, 0, 0, ART_IMG_W, halfH)
+
+  const img = ctx.getImageData(0, 0, ART_IMG_W, halfH)
+  const d = img.data
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
+    const g = Math.round(lum / 17) * 17
+    d[i] = d[i + 1] = d[i + 2] = g
+    d[i + 3] = 255
   }
-  return bytes
+  ctx.putImageData(img, 0, 0)
+
+  const base64 = c.toDataURL('image/png').split(',')[1]
+  const binary = atob(base64)
+  return Array.from({ length: binary.length }, (_, i) => binary.charCodeAt(i))
 }
 
 function drawGlyph(ctx: CanvasRenderingContext2D, glyph: string): void {
-  ctx.fillStyle = '#00ff88'
+  ctx.fillStyle = '#fff'
   ctx.font = 'bold 96px monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
@@ -54,7 +65,7 @@ const FALLBACK_GLYPHS: Record<string, string> = {
   guaritore:         '✚',
 }
 
-export async function renderArtifactImage(artifactId: string): Promise<number[]> {
+export async function renderArtifactImage(artifactId: string): Promise<[number[], number[]]> {
   const canvas = document.createElement('canvas')
   canvas.width = ART_IMG_W
   canvas.height = ART_IMG_H
@@ -74,10 +85,10 @@ export async function renderArtifactImage(artifactId: string): Promise<number[]>
     drawGlyph(ctx, FALLBACK_GLYPHS[artifactId] ?? '✦')
   }
 
-  return canvasToBytes(canvas)
+  return [canvasHalfToPng(canvas, 0), canvasHalfToPng(canvas, ART_IMG_H / 2)]
 }
 
-export async function renderClassImage(classId: string): Promise<number[]> {
+export async function renderClassImage(classId: string): Promise<[number[], number[]]> {
   const canvas = document.createElement('canvas')
   canvas.width = ART_IMG_W
   canvas.height = ART_IMG_H
@@ -95,5 +106,5 @@ export async function renderClassImage(classId: string): Promise<number[]> {
     drawGlyph(ctx, FALLBACK_GLYPHS[classId] ?? '★')
   }
 
-  return canvasToBytes(canvas)
+  return [canvasHalfToPng(canvas, 0), canvasHalfToPng(canvas, ART_IMG_H / 2)]
 }

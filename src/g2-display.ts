@@ -304,9 +304,9 @@ export class G2Display {
     let imageKey: string
 
     if (player.playerClass) {
-      const classImg = await renderClassImage(player.playerClass)
-      topData = classImg.slice(0, ART_IMG_W * (ART_IMG_H / 2))
-      botData = classImg.slice(ART_IMG_W * (ART_IMG_H / 2))
+      const [top, bot] = await renderClassImage(player.playerClass)
+      topData = top
+      botData = bot
       imageKey = 'class_' + player.playerClass
     } else {
       const rankImgs = await renderWelcomeImage(player.rank)
@@ -736,23 +736,30 @@ export class G2Display {
   async showArtifactReward(artifactId: ArtifactId): Promise<void> {
     if (!this.initialized) return
     const content = this.buildArtifactRewardNarrow(artifactId)
-    const imgData = await renderArtifactImage(artifactId)
+    const [imgTop, imgBot] = await renderArtifactImage(artifactId)
 
     if (!this.inImageMode) {
       this.inImageMode = true
       this.lastContent = content
       const ok = await this._rebuildWithImages(content)
       if (ok) {
-        await this.bridge.updateImageRawData(new ImageRawDataUpdate({
-          containerID: 2, containerName: 'img-top', imageData: imgData.slice(0, ART_IMG_W * 144),
-        }))
-        await this.bridge.updateImageRawData(new ImageRawDataUpdate({
-          containerID: 3, containerName: 'img-bot', imageData: imgData.slice(ART_IMG_W * 144),
-        }))
+        const [r1, r2] = await this._sendImages(imgTop, imgBot)
+        await this._showImgDiag(content, r1, r2, imgTop.length, imgBot.length)
       }
     } else {
-      this.lastContent = content
-      await this.update(content)
+      if (content !== this.lastContent) {
+        this.lastContent = content
+        try {
+          await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
+            containerID: 1, containerName: 'main',
+            content, contentOffset: 0, contentLength: content.length,
+          }))
+        } catch {
+          await this._rebuildWithImages(content)
+        }
+      }
+      const [r1, r2] = await this._sendImages(imgTop, imgBot)
+      await this._showImgDiag(content, r1, r2, imgTop.length, imgBot.length)
     }
   }
 

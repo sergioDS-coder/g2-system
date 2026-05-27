@@ -73,7 +73,6 @@ let rankUpIdx  = 0
 let warningIdx = 0
 
 let selectedRankingEntry: RankingEntry | null = null
-let isProcessingEvent = false
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -385,35 +384,29 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    if (isProcessingEvent) return
-    isProcessingEvent = true
-    try {
-      let eventType = event.eventType
-      if (eventType === undefined && event.textEvent) eventType = event.textEvent.eventType
-      if (eventType === undefined && event.sysEvent) eventType = event.sysEvent.eventType
+    let eventType = event.eventType
+    if (eventType === undefined && event.textEvent) eventType = event.textEvent.eventType
+    if (eventType === undefined && event.sysEvent) eventType = event.sysEvent.eventType
 
-      if ([
-        OsEventTypeList.FOREGROUND_ENTER_EVENT,
-        OsEventTypeList.FOREGROUND_EXIT_EVENT,
-        OsEventTypeList.ABNORMAL_EXIT_EVENT,
-        OsEventTypeList.SYSTEM_EXIT_EVENT,
-      ].includes(eventType)) return
+    if ([
+      OsEventTypeList.FOREGROUND_ENTER_EVENT,
+      OsEventTypeList.FOREGROUND_EXIT_EVENT,
+      OsEventTypeList.ABNORMAL_EXIT_EVENT,
+      OsEventTypeList.SYSTEM_EXIT_EVENT,
+    ].includes(eventType)) return
 
-      switch (eventType) {
-        case OsEventTypeList.CLICK_EVENT:
-        case 0:
-        case undefined:
-        case null:
-          await handlePress(); break
-        case OsEventTypeList.DOUBLE_CLICK_EVENT:
-          await handleDoublePress(); break
-        case OsEventTypeList.SCROLL_TOP_EVENT:
-          await handleSwipeUp(); break
-        case OsEventTypeList.SCROLL_BOTTOM_EVENT:
-          await handleSwipeDown(); break
-      }
-    } finally {
-      isProcessingEvent = false
+    switch (eventType) {
+      case OsEventTypeList.CLICK_EVENT:
+      case 0:
+      case undefined:
+      case null:
+        await handlePress(); break
+      case OsEventTypeList.DOUBLE_CLICK_EVENT:
+        await handleDoublePress(); break
+      case OsEventTypeList.SCROLL_TOP_EVENT:
+        await handleSwipeUp(); break
+      case OsEventTypeList.SCROLL_BOTTOM_EVENT:
+        await handleSwipeDown(); break
     }
   })
 }
