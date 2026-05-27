@@ -274,11 +274,11 @@ async function startChangeName() {
 
 async function goToQuestList() {
   currentScreen = 'questList'; questIdx = 0
-  await display.update(display.buildQuestList(quests, questIdx))
+  await display.showQuestList(quests, questIdx)
 }
 
 async function refreshQuestList() {
-  await display.update(display.buildQuestList(quests, questIdx))
+  await display.showQuestList(quests, questIdx)
 }
 
 async function goToProfile() {

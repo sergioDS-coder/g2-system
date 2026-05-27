@@ -16,7 +16,7 @@ import type { DailyQuest } from './quest-data'
 import type { RankingEntry } from './supabase-client'
 import type { Lang } from './i18n'
 import { t } from './i18n'
-import { renderQuestImages, renderWelcomeImage, type QuestCardInfo, IMG_W, IMG_H } from './quest-image'
+import { renderQuestImages, renderWelcomeImage, renderWildQuestImage, type QuestCardInfo, IMG_W, IMG_H } from './quest-image'
 import { renderArtifactImage, renderClassImage, ART_IMG_W, ART_IMG_H } from './artifact-image'
 
 const W = 576
@@ -94,6 +94,66 @@ export class G2Display {
       console.error('Update failed, rebuilding page', e)
       await this._rebuildFullWidth(content)
     }
+  }
+
+  /** Quest list with Wild Quest card on the left + narrow list on the right */
+  async showQuestList(quests: DailyQuest[], selectedIdx: number): Promise<void> {
+    if (!this.initialized) return
+    const content = this.buildQuestListNarrow(quests, selectedIdx)
+    const [topData, botData] = await renderWildQuestImage()
+    const imageKey = 'wild_quest'
+
+    if (!this.inImageMode) {
+      this.inImageMode = true
+      this.lastContent = content
+      const ok = await this._rebuildWithImages(content)
+      if (ok) {
+        const [r1, r2] = await this._sendImages(topData, botData)
+        this.lastImageTemplateId = imageKey
+        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
+      }
+    } else {
+      if (content !== this.lastContent) {
+        this.lastContent = content
+        try {
+          await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
+            containerID: 1, containerName: 'main',
+            content, contentOffset: 0, contentLength: content.length,
+          }))
+        } catch {
+          await this._rebuildWithImages(content)
+        }
+      }
+      if (this.lastImageTemplateId !== imageKey) {
+        const [r1, r2] = await this._sendImages(topData, botData)
+        this.lastImageTemplateId = imageKey
+        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
+      }
+    }
+  }
+
+  /** Quest list text for narrow right column (~19 chars/line) */
+  buildQuestListNarrow(quests: DailyQuest[], selectedIdx: number): string {
+    const tr = t(this.lang)
+    const done = quests.filter(q => q.completed).length
+    const c = (i: number) => i === selectedIdx ? '▶' : ' '
+    const lines: string[] = [
+      `QUESTS ${done}/${quests.length}`,
+      SHORT_LINE,
+    ]
+
+    quests.forEach((q, i) => {
+      const status = q.completed ? '●' : '○'
+      const name = q.jollyName ?? ((tr as any)[q.nameKey] ?? q.nameKey)
+      const label = truncate(`${name} ${q.amount}${q.unit}`, 16)
+      lines.push(`${c(i)}${status} ${label}`)
+    })
+
+    lines.push(SHORT_LINE)
+    lines.push(`${c(quests.length)} ★ Profile`)
+    lines.push(`${c(quests.length + 1)} ✕ Exit`)
+    lines.push('▲/▼  [P]=Seleziona')
+    return lines.join('\n')
   }
 
   /** Show quest detail with real image on the left (180×288) + text on the right */

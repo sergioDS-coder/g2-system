@@ -42,6 +42,86 @@ export async function renderQuestImages(
   ]
 }
 
+/** Loads /wild-quest.png and splits it. Falls back to a Canvas-drawn card. */
+export async function renderWildQuestImage(): Promise<[number[], number[]]> {
+  const c = await loadImageFile('/wild-quest.png')
+  if (c) {
+    return [
+      canvasToImageBytes(c, 0, 0, IMG_W, IMG_H),
+      canvasToImageBytes(c, 0, IMG_H, IMG_W, IMG_H),
+    ]
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = IMG_W
+  canvas.height = IMG_H * 2
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#000'
+  ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
+  ctx.fillStyle = '#fff'
+  drawWildQuestCard(ctx, IMG_W, IMG_H * 2)
+  return [
+    canvasToImageBytes(canvas, 0, 0, IMG_W, IMG_H),
+    canvasToImageBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
+  ]
+}
+
+function drawWildQuestCard(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+
+  // Double border frame
+  ctx.strokeStyle = '#fff'
+  ctx.lineWidth = 3
+  ctx.strokeRect(6, 6, w - 12, h - 12)
+  ctx.lineWidth = 1
+  ctx.strokeRect(11, 11, w - 22, h - 22)
+
+  // Header band "WILD"
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(6, 6, w - 12, 44)
+  ctx.fillStyle = '#000'
+  ctx.font = 'bold 26px monospace'
+  ctx.fillText('WILD', w / 2, 28)
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(11, 50, w - 22, 2)
+
+  // Aura glow behind the question marks
+  const cy = h / 2 - 16
+  for (let r = 72; r >= 28; r -= 22) {
+    ctx.globalAlpha = 0.07
+    ctx.beginPath(); ctx.arc(w / 2, cy, r, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.globalAlpha = 1
+
+  // Three question marks arranged in a triangle
+  ctx.font = 'bold 72px monospace'
+  ctx.fillText('?', w / 2 - 44, cy - 14)
+  ctx.fillText('?', w / 2 + 44, cy - 14)
+  ctx.font = 'bold 80px monospace'
+  ctx.fillText('?', w / 2, cy + 24)
+
+  // Decorative corner marks
+  ctx.lineWidth = 2
+  ctx.strokeStyle = '#fff'
+  for (const [x, y, dx, dy] of [[16,56,1,1],[w-16,56,-1,1],[16,h-56,1,-1],[w-16,h-56,-1,-1]] as [number,number,number,number][]) {
+    ctx.globalAlpha = 0.55
+    ctx.beginPath()
+    ctx.moveTo(x, y); ctx.lineTo(x + dx * 14, y)
+    ctx.moveTo(x, y); ctx.lineTo(x, y + dy * 14)
+    ctx.stroke()
+  }
+  ctx.globalAlpha = 1
+
+  // Footer band "QUEST"
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(11, h - 52, w - 22, 2)
+  ctx.fillRect(6, h - 50, w - 12, 44)
+  ctx.fillStyle = '#000'
+  ctx.font = 'bold 26px monospace'
+  ctx.fillText('QUEST', w / 2, h - 28)
+  ctx.fillStyle = '#fff'
+}
+
 /** Loads /welcome-images/<rank>.png and splits it into the two containers.
  *  Falls back to a Canvas-drawn rank card if the PNG file is not found. */
 export async function renderWelcomeImage(rank: string): Promise<[number[], number[]]> {
