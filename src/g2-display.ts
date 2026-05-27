@@ -9,7 +9,9 @@ import {
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 
-import type { PlayerProfile, Rank } from './game-engine'
+import type { PlayerProfile, Rank, ClassType } from './game-engine'
+import { getClassAbilityName } from './game-engine'
+import { type ArtifactId, getArtifact } from './artifact-data'
 import type { DailyQuest } from './quest-data'
 import type { RankingEntry } from './supabase-client'
 import type { Lang } from './i18n'
@@ -289,6 +291,42 @@ export class G2Display {
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
     const name = truncate(player.name, 13)
 
+    // Page 0 (selectedIdx 0-2): stats + class/ability
+    // Page 3: artifacts list
+    // Navigation items at bottom: 0=Ranking, 1=Name, 2=Back
+    const cls = player.playerClass
+    const clsKey = cls ? ('class' + cls.charAt(0).toUpperCase() + cls.slice(1).replace('_', '')) as keyof typeof tr : null
+    const className = cls ? (clsKey && (tr as any)[clsKey] ? (tr as any)[clsKey] : cls) : '-'
+    const abilityName = cls ? getClassAbilityName(cls) : '-'
+
+    const artifacts = player.artifacts ?? []
+    if (selectedIdx === 3) {
+      // Artifacts page
+      const artifactLines: string[] = []
+      if (artifacts.length === 0) {
+        artifactLines.push(tr.noArtifacts)
+      } else {
+        for (const id of artifacts) {
+          const a2 = getArtifact(id)
+          if (a2) {
+            const nameKey = ('artifact' + id.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('')) as keyof typeof tr
+            const displayName = (tr as any)[nameKey] ?? id
+            artifactLines.push(truncate(displayName, 18))
+          }
+        }
+      }
+      return [
+        `${name} ${rankPos}`,
+        `${tr.artifact}`,
+        SHORT_LINE,
+        ...artifactLines.slice(0, 5),
+        SHORT_LINE,
+        `${c(0)} Ranking`,
+        `${c(1)} Name`,
+        `${c(2)} Back`,
+      ].join('\n')
+    }
+
     return [
       `${name} ${rankPos}`,
       `Lv.${player.level} · ${player.rank}`,
@@ -297,6 +335,7 @@ export class G2Display {
       SHORT_LINE,
       `${tr.attrFor}:${a.str} ${tr.attrAgi}:${a.agi} ${tr.attrVit}:${a.vit}`,
       `${tr.attrInt}:${a.int} ${tr.attrEnd}:${a.end}  Q:${player.questsCompleted}`,
+      `Cls:${truncate(className, 10)} ${truncate(abilityName, 7)}`,
       SHORT_LINE,
       `${c(0)} Ranking`,
       `${c(1)} Name`,
@@ -539,6 +578,11 @@ export class G2Display {
     const rankPos = rankPosition ? `#${rankPosition}` : '-'
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
 
+    const cls = player.playerClass
+    const clsKey = cls ? ('class' + cls.charAt(0).toUpperCase() + cls.slice(1).replace('_', '')) as keyof typeof tr : null
+    const className = cls ? (clsKey && (tr as any)[clsKey] ? (tr as any)[clsKey] : cls) : '-'
+    const abilityName = cls ? getClassAbilityName(cls) : '-'
+
     return [
       `== ${truncate(player.name, 16)} ${rankPos} ==`,
       `Lv.${player.level}  Rank: ${player.rank}`,
@@ -547,6 +591,7 @@ export class G2Display {
       LINE,
       `${tr.attrFor}:${a.str} ${tr.attrAgi}:${a.agi} ${tr.attrVit}:${a.vit}`,
       `${tr.attrInt}:${a.int} ${tr.attrEnd}:${a.end}  Q:${player.questsCompleted}`,
+      `Cls: ${className}  Abi: ${abilityName}`,
       LINE,
       `${c(0)} Global Ranking`,
       `${c(1)} Change Name`,
@@ -596,6 +641,22 @@ export class G2Display {
     lines.push(LINE)
     lines.push('▲/▼=Nav  [PRESS]=Select')
     return lines.join('\n')
+  }
+
+  buildArtifactReward(artifactId: ArtifactId): string {
+    const tr = t(this.lang)
+    const nameKey = ('artifact' + artifactId.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('')) as keyof typeof tr
+    const displayName = (tr as any)[nameKey] ?? artifactId
+    return [
+      '╔══ ' + tr.jollyReward + ' ══╗',
+      '║',
+      `║  ${tr.artifact} ottenuto!`,
+      '║',
+      `║  ${truncate(displayName, 20)}`,
+      '║',
+      '╚══════════════════════════╝',
+      tr.pressToContinue,
+    ].join('\n')
   }
 
   buildError(message: string): string {

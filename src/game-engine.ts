@@ -3,6 +3,56 @@
 export type Rank = 'F' | 'E' | 'D' | 'C' | 'B' | 'A' | 'S' | 'SS' | 'SSS'
 export type Attribute = 'str' | 'agi' | 'vit' | 'int' | 'end'
 export type Privacy = 'public' | 'anonymous' | 'private'
+export type ClassType = 'combattente' | 'carro_armato' | 'assassino' | 'mago' | 'ranger' | 'guaritore'
+
+export interface AbilityState {
+  strQuestStreak: number      // Combattente: consecutive STR quests completed
+  intQuestStreak: number      // Mago: consecutive INT quests completed
+  weeklySkipUsed: string      // Assassino: date (YYYY-MM-DD) when weekly skip was last used
+  pendingRecovery: number     // Guaritore: EXP to recover next morning
+  adaptationDate: string      // Ranger: date of current adaptation tracking
+  dailyAttrsCompleted: string[] // Ranger: attribute types completed today
+}
+
+const CLASS_WEIGHTS: Record<ClassType, Record<Attribute, number>> = {
+  combattente:  { str: 3, agi: 1, vit: 0, int: 0, end: 0 },
+  assassino:    { str: 1, agi: 3, vit: 0, int: 0, end: 0 },
+  mago:         { str: 0, agi: 0, vit: 0, int: 3, end: 1 },
+  ranger:       { str: 0, agi: 2, vit: 0, int: 2, end: 0 },
+  carro_armato: { str: 0, agi: 0, vit: 1, int: 0, end: 3 },
+  guaritore:    { str: 0, agi: 0, vit: 3, int: 1, end: 0 },
+}
+
+export function determineClass(attrs: Record<Attribute, number>, level: number): ClassType | null {
+  if (level < 5) return null
+  const classes = Object.keys(CLASS_WEIGHTS) as ClassType[]
+  const attrsKeys = Object.keys(attrs) as Attribute[]
+  let bestCls: ClassType = 'combattente'
+  let bestScore = -1
+  for (const cls of classes) {
+    const score = attrsKeys.reduce((sum, attr) => sum + attrs[attr] * CLASS_WEIGHTS[cls][attr], 0)
+    if (score > bestScore) { bestScore = score; bestCls = cls }
+  }
+  return bestCls
+}
+
+export function getClassAbilityName(cls: ClassType): string {
+  const names: Record<ClassType, string> = {
+    combattente: 'Berserker',
+    carro_armato: 'Fortezza',
+    assassino: 'Furtività',
+    mago: 'Amplificazione',
+    ranger: 'Adattamento',
+    guaritore: 'Rigenerazione',
+  }
+  return names[cls]
+}
+
+export function isWeeklySkipAvailable(lastUsedDate: string): boolean {
+  if (!lastUsedDate) return true
+  const diff = Date.now() - new Date(lastUsedDate).getTime()
+  return diff > 7 * 24 * 60 * 60 * 1000
+}
 
 export interface PlayerProfile {
   playerId: string
@@ -16,6 +66,9 @@ export interface PlayerProfile {
   privacy: Privacy
   language: string
   lastDailyDate: string  // YYYY-MM-DD
+  playerClass: ClassType | null
+  artifacts: string[]
+  abilityState: AbilityState
 }
 
 // ─── Tabella Rank ────────────────────────────────────────────────────────────
@@ -71,6 +124,16 @@ export function createDefaultPlayer(playerId: string, name: string, lang: string
     privacy: 'anonymous',
     language: lang,
     lastDailyDate: '',
+    playerClass: null,
+    artifacts: [],
+    abilityState: {
+      strQuestStreak: 0,
+      intQuestStreak: 0,
+      weeklySkipUsed: '',
+      pendingRecovery: 0,
+      adaptationDate: '',
+      dailyAttrsCompleted: [],
+    },
   }
 }
 
@@ -84,15 +147,43 @@ export interface ExpResult {
   newLevel: number
   oldRank: Rank
   newRank: Rank
+  expGained: number
 }
 
-export function addExp(player: PlayerProfile, exp: number, attribute: Attribute): ExpResult {
+export function addExp(player: PlayerProfile, exp: number, attribute: Attribute, expMultiplier = 1): ExpResult {
   const oldLevel = player.level
   const oldRank = player.rank
 
   const newPlayer: PlayerProfile = JSON.parse(JSON.stringify(player))
-  newPlayer.expTotal += exp
-  newPlayer.expCurrent += exp
+
+  // Update ability streaks
+  if (attribute === 'str') {
+    newPlayer.abilityState.strQuestStreak++
+  } else {
+    newPlayer.abilityState.strQuestStreak = 0
+  }
+  if (attribute === 'int') {
+    newPlayer.abilityState.intQuestStreak++
+  } else {
+    newPlayer.abilityState.intQuestStreak = 0
+  }
+
+  // Apply class ability bonuses
+  let finalExp = Math.round(exp * expMultiplier)
+
+  if (newPlayer.playerClass === 'combattente' && attribute === 'str' && newPlayer.abilityState.strQuestStreak >= 3) {
+    // Berserker: double EXP at streak >= 3
+    finalExp *= 2
+  }
+
+  if (newPlayer.playerClass === 'mago' && attribute === 'int') {
+    // Amplificazione: +10% per streak capped at +50%
+    const bonus = Math.min(newPlayer.abilityState.intQuestStreak * 0.10, 0.50)
+    finalExp = Math.round(finalExp * (1 + bonus))
+  }
+
+  newPlayer.expTotal += finalExp
+  newPlayer.expCurrent += finalExp
   newPlayer.attributes[attribute] += 1
 
   // Check level up
@@ -103,6 +194,9 @@ export function addExp(player: PlayerProfile, exp: number, attribute: Attribute)
 
   newPlayer.rank = getRankFromLevel(newPlayer.level)
 
+  // Update class based on new attributes and level
+  newPlayer.playerClass = determineClass(newPlayer.attributes, newPlayer.level)
+
   return {
     player: newPlayer,
     leveledUp: newPlayer.level > oldLevel,
@@ -111,6 +205,7 @@ export function addExp(player: PlayerProfile, exp: number, attribute: Attribute)
     newLevel: newPlayer.level,
     oldRank,
     newRank: newPlayer.rank,
+    expGained: finalExp,
   }
 }
 
