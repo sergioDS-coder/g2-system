@@ -47,7 +47,8 @@ function normalizePlayer(p: PlayerProfile): PlayerProfile {
 type Screen =
   | 'boot' | 'setup' | 'nameInput' | 'dailyMessage' | 'allDone'
   | 'warning' | 'questList' | 'questDetail'
-  | 'levelUp' | 'rankUp' | 'profile' | 'ranking' | 'error'
+  | 'levelUp' | 'rankUp' | 'profile' | 'artifacts'
+  | 'ranking' | 'rankingDetail' | 'error'
   | 'artifactReward'
 
 let currentScreen: Screen = 'boot'
@@ -64,11 +65,15 @@ let myRankPos: number | null = null
 let questIdx   = 0
 let profileIdx = 0
 let detailIdx  = 0
+let rankingIdx = 0
 let allDoneIdx = 0
 let msgIdx     = 0
 let levelIdx   = 0
 let rankUpIdx  = 0
 let warningIdx = 0
+
+let selectedRankingEntry: RankingEntry | null = null
+let isProcessingEvent = false
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -282,10 +287,15 @@ async function goToProfile() {
   supabase.getPlayerRank(player!.playerId).then(r => { myRankPos = r ?? myRankPos }).catch(() => {})
 }
 
+async function goToArtifacts() {
+  currentScreen = 'artifacts'
+  await display.update(display.buildArtifactList(player!))
+}
+
 async function goToRanking() {
-  currentScreen = 'ranking'; rankingPage = 0
+  currentScreen = 'ranking'; rankingPage = 0; rankingIdx = 0
   ranking = await supabase.getRanking(50)
-  await display.update(display.buildRanking(ranking, rankingPage, supabase.lastRankingError))
+  await display.update(display.buildRanking(ranking, rankingPage, rankingIdx, supabase.lastRankingError))
 }
 
 // ─── Quest ────────────────────────────────────────────────────────────────────
@@ -375,29 +385,35 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    let eventType = event.eventType
-    if (eventType === undefined && event.textEvent) eventType = event.textEvent.eventType
-    if (eventType === undefined && event.sysEvent) eventType = event.sysEvent.eventType
+    if (isProcessingEvent) return
+    isProcessingEvent = true
+    try {
+      let eventType = event.eventType
+      if (eventType === undefined && event.textEvent) eventType = event.textEvent.eventType
+      if (eventType === undefined && event.sysEvent) eventType = event.sysEvent.eventType
 
-    if ([
-      OsEventTypeList.FOREGROUND_ENTER_EVENT,
-      OsEventTypeList.FOREGROUND_EXIT_EVENT,
-      OsEventTypeList.ABNORMAL_EXIT_EVENT,
-      OsEventTypeList.SYSTEM_EXIT_EVENT,
-    ].includes(eventType)) return
+      if ([
+        OsEventTypeList.FOREGROUND_ENTER_EVENT,
+        OsEventTypeList.FOREGROUND_EXIT_EVENT,
+        OsEventTypeList.ABNORMAL_EXIT_EVENT,
+        OsEventTypeList.SYSTEM_EXIT_EVENT,
+      ].includes(eventType)) return
 
-    switch (eventType) {
-      case OsEventTypeList.CLICK_EVENT:
-      case 0:
-      case undefined:
-      case null:
-        await handlePress(); break
-      case OsEventTypeList.DOUBLE_CLICK_EVENT:
-        await handleDoublePress(); break
-      case OsEventTypeList.SCROLL_TOP_EVENT:
-        await handleSwipeUp(); break
-      case OsEventTypeList.SCROLL_BOTTOM_EVENT:
-        await handleSwipeDown(); break
+      switch (eventType) {
+        case OsEventTypeList.CLICK_EVENT:
+        case 0:
+        case undefined:
+        case null:
+          await handlePress(); break
+        case OsEventTypeList.DOUBLE_CLICK_EVENT:
+          await handleDoublePress(); break
+        case OsEventTypeList.SCROLL_TOP_EVENT:
+          await handleSwipeUp(); break
+        case OsEventTypeList.SCROLL_BOTTOM_EVENT:
+          await handleSwipeDown(); break
+      }
+    } finally {
+      isProcessingEvent = false
     }
   })
 }
@@ -417,7 +433,12 @@ async function handlePress() {
     levelUp: handleLevelUpPress,
     rankUp: async () => { if (rankUpIdx === 1) await bridge.shutDownPageContainer(0); else { pendingRankUp = null; await goToQuestList() } },
     profile: handleProfilePress,
-    ranking: async () => { await goToProfile() },
+    artifacts: async () => { await goToProfile() },
+    ranking: handleRankingPress,
+    rankingDetail: async () => {
+      currentScreen = 'ranking'
+      await display.update(display.buildRanking(ranking, rankingPage, rankingIdx, supabase.lastRankingError))
+    },
     error: async () => { await initialize() },
     artifactReward: handleArtifactRewardPress,
   }
@@ -490,9 +511,22 @@ async function handleLevelUpPress() {
 }
 
 async function handleProfilePress() {
-  if (profileIdx === 0) await goToRanking()
-  else if (profileIdx === 1) await startChangeName()
+  if (profileIdx === 0) await goToArtifacts()
+  else if (profileIdx === 1) await goToRanking()
+  else if (profileIdx === 2) await startChangeName()
   else await goToQuestList()
+}
+
+async function handleRankingPress() {
+  const pageItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
+  if (rankingIdx < pageItems.length) {
+    selectedRankingEntry = pageItems[rankingIdx]
+    const pos = rankingPage * 4 + rankingIdx + 1
+    currentScreen = 'rankingDetail'
+    await display.update(display.buildRankingDetail(selectedRankingEntry, pos))
+  } else {
+    await goToProfile()
+  }
 }
 
 async function handleArtifactRewardPress() {
@@ -549,11 +583,20 @@ async function handleSwipeUp() {
       rankUpIdx = Math.max(0, rankUpIdx - 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
-    case 'ranking':
-      if (rankingPage > 0) {
-        rankingPage--; await display.update(display.buildRanking(ranking, rankingPage, supabase.lastRankingError))
+    case 'ranking': {
+      const upItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
+      if (rankingIdx > 0) {
+        rankingIdx--
+        await display.update(display.buildRanking(ranking, rankingPage, rankingIdx, supabase.lastRankingError))
+      } else if (rankingPage > 0) {
+        rankingPage--
+        const prevItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
+        rankingIdx = prevItems.length
+        await display.update(display.buildRanking(ranking, rankingPage, rankingIdx, supabase.lastRankingError))
       }
+      void upItems
       break
+    }
   }
 }
 
@@ -578,11 +621,17 @@ async function handleSwipeDown() {
     case 'rankUp':
       rankUpIdx = Math.min(1, rankUpIdx + 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
-      if (profileIdx < 2) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
+      if (profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
     case 'ranking': {
+      const downItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
+      const maxIdx = downItems.length
       const totalPages = Math.ceil(ranking.length / 4)
-      if (rankingPage < totalPages - 1) {
-        rankingPage++; await display.update(display.buildRanking(ranking, rankingPage, supabase.lastRankingError))
+      if (rankingIdx < maxIdx) {
+        rankingIdx++
+        await display.update(display.buildRanking(ranking, rankingPage, rankingIdx, supabase.lastRankingError))
+      } else if (rankingPage < totalPages - 1) {
+        rankingPage++; rankingIdx = 0
+        await display.update(display.buildRanking(ranking, rankingPage, rankingIdx, supabase.lastRankingError))
       }
       break
     }

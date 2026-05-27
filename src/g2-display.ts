@@ -301,8 +301,7 @@ export class G2Display {
     ].join('\n')
   }
 
-  /** Profile text for narrow right column (~19 chars/line).
-   *  Shows stats, class/ability, artifacts inline, then menu. */
+  /** Profile text for narrow right column (~19 chars/line). Compact layout, always fits screen. */
   buildProfileNarrow(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0): string {
     const tr = t(this.lang)
     const a = player.attributes
@@ -313,37 +312,23 @@ export class G2Display {
     const cls = player.playerClass
     const clsKey = cls ? ('class' + cls.charAt(0).toUpperCase() + cls.slice(1).replace('_', '')) as keyof typeof tr : null
     const className = cls ? (clsKey && (tr as any)[clsKey] ? (tr as any)[clsKey] : cls) : '-'
-    const abilityName = cls ? getClassAbilityName(cls) : '-'
 
-    const artifacts = player.artifacts ?? []
-    const artifactLines: string[] = []
-    if (artifacts.length === 0) {
-      artifactLines.push(tr.noArtifacts ?? 'No artifacts')
-    } else {
-      for (const id of artifacts.slice(0, 5)) {
-        const art = getArtifact(id)
-        if (art) {
-          const nameKey = ('artifact' + id.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('')) as keyof typeof tr
-          const displayName = (tr as any)[nameKey] ?? id
-          artifactLines.push('· ' + truncate(displayName, 16))
-        }
-      }
-    }
+    const artCount = (player.artifacts ?? []).length
+    const artLabel = artCount > 0 ? `Artifacts(${artCount})` : 'Artifacts'
 
     return [
       `${name} ${rankPos}`,
       `Lv.${player.level} · ${player.rank}`,
       SHORT_LINE,
       `EXP:${player.expCurrent}/${player.expTotal}`,
-      `${tr.attrFor}:${a.str} ${tr.attrAgi}:${a.agi} ${tr.attrVit}:${a.vit}`,
-      `${tr.attrInt}:${a.int} ${tr.attrEnd}:${a.end} Q:${player.questsCompleted}`,
-      `Cls:${truncate(className, 9)} ${truncate(abilityName, 7)}`,
+      `F:${a.str} A:${a.agi} V:${a.vit}`,
+      `I:${a.int} E:${a.end} Q:${player.questsCompleted}`,
+      `Cls:${truncate(className, 13)}`,
       SHORT_LINE,
-      ...artifactLines,
-      SHORT_LINE,
-      `${c(0)} Ranking`,
-      `${c(1)} Name`,
-      `${c(2)} Back`,
+      `${c(0)} ${artLabel}`,
+      `${c(1)} Ranking`,
+      `${c(2)} Name`,
+      `${c(3)} Back`,
     ].join('\n')
   }
 
@@ -606,11 +591,13 @@ export class G2Display {
     ].join('\n')
   }
 
-  buildRanking(entries: RankingEntry[], page: number, debugError?: string | null): string {
+  buildRanking(entries: RankingEntry[], page: number, selectedIdx: number, debugError?: string | null): string {
     const itemsPerPage = 4
     const start = page * itemsPerPage
     const pageItems = entries.slice(start, start + itemsPerPage)
     const totalPages = Math.max(1, Math.ceil(entries.length / itemsPerPage))
+    const c = (i: number) => i === selectedIdx ? '▶' : ' '
+    const backIdx = pageItems.length
 
     const lines: string[] = [
       `== RANKING (${page + 1}/${totalPages}) ==`,
@@ -637,13 +624,53 @@ export class G2Display {
       pageItems.forEach((e, i) => {
         const pos = (start + i + 1).toString().padStart(2)
         const name = truncate(e.name, 12)
-        lines.push(` ${pos}. ${pad(name, 12)} Lv${e.level} ${e.rank}`)
+        lines.push(`${c(i)} ${pos}. ${pad(name, 12)} Lv${e.level} ${e.rank}`)
       })
     }
 
     lines.push(LINE)
-    lines.push('▲/▼=Pagina  [P]=Indietro')
+    lines.push(`${c(entries.length === 0 ? 0 : backIdx)} Indietro`)
+    lines.push('▲/▼=Nav  [P]=Seleziona')
     return lines.join('\n')
+  }
+
+  buildArtifactList(player: PlayerProfile): string {
+    const tr = t(this.lang)
+    const artifacts = player.artifacts ?? []
+    const lines: string[] = [
+      `== Artifacts (${artifacts.length}) ==`,
+      LINE,
+    ]
+
+    if (artifacts.length === 0) {
+      lines.push(tr.noArtifacts ?? 'No artifacts yet')
+    } else {
+      for (const id of artifacts) {
+        const art = getArtifact(id)
+        if (art) {
+          const nameKey = ('artifact' + id.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('')) as keyof typeof tr
+          const displayName = (tr as any)[nameKey] ?? id
+          lines.push('· ' + truncate(displayName, 17))
+        }
+      }
+    }
+
+    lines.push(LINE, '▶ Back', '▲/▼  [P]=Indietro')
+    return lines.join('\n')
+  }
+
+  buildRankingDetail(entry: RankingEntry, pos: number): string {
+    return [
+      `== ${truncate(entry.name, 16)} ==`,
+      `#${pos} · ${entry.rank}`,
+      LINE,
+      `Lv.${entry.level}`,
+      `EXP: ${entry.expTotal}`,
+      `Quests: ${entry.questsCompleted}`,
+      LINE,
+      `▶ Back`,
+      '[P]=Indietro',
+    ].join('\n')
   }
 
   async showArtifactReward(artifactId: ArtifactId): Promise<void> {
