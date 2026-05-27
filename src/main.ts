@@ -63,9 +63,7 @@ let myRankPos: number | null = null
 
 let questIdx   = 0
 let profileIdx = 0
-let profilePage = 0
 let detailIdx  = 0
-// rankingIdx removed – single press always returns to profile
 let allDoneIdx = 0
 let msgIdx     = 0
 let levelIdx   = 0
@@ -77,7 +75,6 @@ let pendingRankUp: { oldRank: Rank } | null = null
 let warningExpLost = 0
 
 let pendingArtifact: ArtifactId | null = null
-let artifactIdx = 0
 
 // ─── Inserimento nome, lingua e privacy ───────────────────────────────────────
 
@@ -280,16 +277,9 @@ async function refreshQuestList() {
 }
 
 async function goToProfile() {
-  currentScreen = 'profile'; profileIdx = 0; profilePage = 0
-  // Show immediately with cached rank, then refresh in background
-  await display.showProfile(player!, myRankPos, profileIdx, profilePage)
-  const freshRank = await supabase.getPlayerRank(player!.playerId)
-  if (currentScreen === 'profile' && freshRank !== myRankPos) {
-    myRankPos = freshRank
-    await display.showProfile(player!, myRankPos, profileIdx, profilePage)
-  } else {
-    myRankPos = freshRank ?? myRankPos
-  }
+  currentScreen = 'profile'; profileIdx = 0
+  await display.showProfile(player!, myRankPos, profileIdx)
+  supabase.getPlayerRank(player!.playerId).then(r => { myRankPos = r ?? myRankPos }).catch(() => {})
 }
 
 async function goToRanking() {
@@ -340,7 +330,7 @@ async function completeQuest() {
       pendingArtifact = rolled
       pendingLevelUp = result.leveledUp ? { oldLevel: result.oldLevel } : pendingLevelUp
       pendingRankUp = result.rankedUp ? { oldRank: result.oldRank } : pendingRankUp
-      artifactIdx = 0; currentScreen = 'artifactReward'
+      currentScreen = 'artifactReward'
       await display.showArtifactReward(rolled)
       return
     }
@@ -385,34 +375,22 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    console.log('[Bridge] Raw event:', JSON.stringify(event))
-    
-    // Extract eventType from any possible location
     let eventType = event.eventType
     if (eventType === undefined && event.textEvent) eventType = event.textEvent.eventType
     if (eventType === undefined && event.sysEvent) eventType = event.sysEvent.eventType
-    
-    console.log('[Bridge] Extracted eventType:', eventType)
 
-    // Handle lifecycle events first
     if ([
       OsEventTypeList.FOREGROUND_ENTER_EVENT,
       OsEventTypeList.FOREGROUND_EXIT_EVENT,
       OsEventTypeList.ABNORMAL_EXIT_EVENT,
       OsEventTypeList.SYSTEM_EXIT_EVENT,
-    ].includes(eventType)) {
-      console.log('[Bridge] Lifecycle event ignored:', eventType)
-      return
-    }
+    ].includes(eventType)) return
 
-    // Map common event type values
-    // 0 = CLICK, 1 = SCROLL_TOP (UP), 2 = SCROLL_BOTTOM (DOWN), 3 = DOUBLE_CLICK
     switch (eventType) {
       case OsEventTypeList.CLICK_EVENT:
       case 0:
       case undefined:
       case null:
-        console.log('[Bridge] -> handlePress')
         await handlePress(); break
       case OsEventTypeList.DOUBLE_CLICK_EVENT:
         await handleDoublePress(); break
@@ -427,7 +405,6 @@ function setupEventListener() {
 // ─── Handlers Click ───────────────────────────────────────────────────────────
 
 async function handlePress() {
-  console.log('[Main] Handling press on screen:', currentScreen)
   const handlers: Record<Screen, () => Promise<void>> = {
     boot: async () => {},
     setup: async () => { await initialize() },
@@ -498,10 +475,6 @@ async function handleQuestDetailPress() {
   }
 }
 
-async function refreshQuestDetail() {
-  await display.showQuestDetail(quests[questIdx], detailIdx)
-}
-
 async function handleLevelUpPress() {
   if (levelIdx === 1) { await bridge.shutDownPageContainer(0) }
   else {
@@ -517,20 +490,9 @@ async function handleLevelUpPress() {
 }
 
 async function handleProfilePress() {
-  if (profilePage === 1) {
-    // Artifacts page → Back
-    profilePage = 0; profileIdx = 0
-    await display.showProfile(player!, myRankPos, profileIdx, profilePage)
-  } else {
-    if (profileIdx === 0) {
-      // Artifacts (first item, accessible with single press)
-      profilePage = 1; profileIdx = 0
-      await display.showProfile(player!, myRankPos, profileIdx, profilePage)
-    }
-    else if (profileIdx === 1) await goToRanking()
-    else if (profileIdx === 2) await startChangeName()
-    else await goToQuestList()
-  }
+  if (profileIdx === 0) await goToRanking()
+  else if (profileIdx === 1) await startChangeName()
+  else await goToQuestList()
 }
 
 async function handleArtifactRewardPress() {
@@ -586,7 +548,7 @@ async function handleSwipeUp() {
     case 'rankUp':
       rankUpIdx = Math.max(0, rankUpIdx - 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
-      if (profilePage === 0 && profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx, profilePage) } break
+      if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
     case 'ranking':
       if (rankingPage > 0) {
         rankingPage--; await display.update(display.buildRanking(ranking, rankingPage, supabase.lastRankingError))
@@ -616,7 +578,7 @@ async function handleSwipeDown() {
     case 'rankUp':
       rankUpIdx = Math.min(1, rankUpIdx + 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
-      if (profilePage === 0 && profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx, profilePage) } break
+      if (profileIdx < 2) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
     case 'ranking': {
       const totalPages = Math.ceil(ranking.length / 4)
       if (rankingPage < totalPages - 1) {

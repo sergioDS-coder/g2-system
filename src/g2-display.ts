@@ -73,10 +73,7 @@ export class G2Display {
   }
 
   async update(content: string): Promise<void> {
-    if (!this.initialized) {
-      console.warn('[G2Display] Update called before initialization')
-      return
-    }
+    if (!this.initialized) return
     if (content === this.lastContent) return
     this.lastContent = content
 
@@ -238,9 +235,9 @@ export class G2Display {
   }
 
   /** Profile screen: class icon on the left (or rank card if no class) + stats on the right */
-  async showProfile(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0, page = 0): Promise<void> {
+  async showProfile(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0): Promise<void> {
     if (!this.initialized) return
-    const content = this.buildProfileNarrow(player, rankPosition, selectedIdx, page)
+    const content = this.buildProfileNarrow(player, rankPosition, selectedIdx)
 
     let topData: number[]
     let botData: number[]
@@ -305,8 +302,8 @@ export class G2Display {
   }
 
   /** Profile text for narrow right column (~19 chars/line).
-   *  page=0: stats + class/ability  |  page=1: artifacts list */
-  buildProfileNarrow(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0, page = 0): string {
+   *  Shows stats, class/ability, artifacts inline, then menu. */
+  buildProfileNarrow(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0): string {
     const tr = t(this.lang)
     const a = player.attributes
     const rankPos = rankPosition ? `#${rankPosition}` : '-'
@@ -318,32 +315,21 @@ export class G2Display {
     const className = cls ? (clsKey && (tr as any)[clsKey] ? (tr as any)[clsKey] : cls) : '-'
     const abilityName = cls ? getClassAbilityName(cls) : '-'
 
-    if (page === 1) {
-      const artifacts = player.artifacts ?? []
-      const artifactLines: string[] = []
-      if (artifacts.length === 0) {
-        artifactLines.push(tr.noArtifacts)
-      } else {
-        for (const id of artifacts) {
-          const a2 = getArtifact(id)
-          if (a2) {
-            const nameKey = ('artifact' + id.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('')) as keyof typeof tr
-            const displayName = (tr as any)[nameKey] ?? id
-            artifactLines.push(truncate(displayName, 18))
-          }
+    const artifacts = player.artifacts ?? []
+    const artifactLines: string[] = []
+    if (artifacts.length === 0) {
+      artifactLines.push(tr.noArtifacts ?? 'No artifacts')
+    } else {
+      for (const id of artifacts.slice(0, 5)) {
+        const art = getArtifact(id)
+        if (art) {
+          const nameKey = ('artifact' + id.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('')) as keyof typeof tr
+          const displayName = (tr as any)[nameKey] ?? id
+          artifactLines.push('· ' + truncate(displayName, 16))
         }
       }
-      return [
-        `${name} ${rankPos}`,
-        `── ${tr.artifact} ──`,
-        SHORT_LINE,
-        ...artifactLines.slice(0, 6),
-        SHORT_LINE,
-        `▶ Back`,
-      ].join('\n')
     }
 
-    // page === 0: stats + class/ability
     return [
       `${name} ${rankPos}`,
       `Lv.${player.level} · ${player.rank}`,
@@ -353,10 +339,11 @@ export class G2Display {
       `${tr.attrInt}:${a.int} ${tr.attrEnd}:${a.end} Q:${player.questsCompleted}`,
       `Cls:${truncate(className, 9)} ${truncate(abilityName, 7)}`,
       SHORT_LINE,
-      `${c(0)} Artifacts ▶`,
-      `${c(1)} Ranking`,
-      `${c(2)} Name`,
-      `${c(3)} Back`,
+      ...artifactLines,
+      SHORT_LINE,
+      `${c(0)} Ranking`,
+      `${c(1)} Name`,
+      `${c(2)} Back`,
     ].join('\n')
   }
 
