@@ -283,8 +283,15 @@ async function refreshQuestList() {
 
 async function goToProfile() {
   currentScreen = 'profile'; profileIdx = 0; profilePage = 0
-  myRankPos = await supabase.getPlayerRank(player!.playerId)
+  // Show immediately with cached rank, then refresh in background
   await display.showProfile(player!, myRankPos, profileIdx, profilePage)
+  const freshRank = await supabase.getPlayerRank(player!.playerId)
+  if (currentScreen === 'profile' && freshRank !== myRankPos) {
+    myRankPos = freshRank
+    await display.showProfile(player!, myRankPos, profileIdx, profilePage)
+  } else {
+    myRankPos = freshRank ?? myRankPos
+  }
 }
 
 async function goToRanking() {
@@ -491,14 +498,16 @@ async function handleLevelUpPress() {
 
 async function handleProfilePress() {
   if (profilePage === 1) {
+    // Artifacts page → Back
     profilePage = 0; profileIdx = 0
     await display.showProfile(player!, myRankPos, profileIdx, profilePage)
   } else {
-    if (profileIdx === 0) await goToRanking()
-    else if (profileIdx === 1) {
+    if (profileIdx === 0) {
+      // Artifacts (first item, accessible with single press)
       profilePage = 1; profileIdx = 0
       await display.showProfile(player!, myRankPos, profileIdx, profilePage)
     }
+    else if (profileIdx === 1) await goToRanking()
     else if (profileIdx === 2) await startChangeName()
     else await goToQuestList()
   }

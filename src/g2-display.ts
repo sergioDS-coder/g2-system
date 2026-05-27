@@ -347,8 +347,8 @@ export class G2Display {
       `${tr.attrInt}:${a.int} ${tr.attrEnd}:${a.end} Q:${player.questsCompleted}`,
       `Cls:${truncate(className, 9)} ${truncate(abilityName, 7)}`,
       SHORT_LINE,
-      `${c(0)} Ranking`,
-      `${c(1)} Artifacts`,
+      `${c(0)} Artifacts ▶`,
+      `${c(1)} Ranking`,
       `${c(2)} Name`,
       `${c(3)} Back`,
     ].join('\n')
