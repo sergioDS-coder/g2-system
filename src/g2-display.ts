@@ -41,8 +41,6 @@ function pad(text: string, len: number): string {
   return text.length >= len ? text.slice(0, len) : text + ' '.repeat(len - text.length)
 }
 
-const BRIDGE_TIMEOUT = 2500
-
 export class G2Display {
   private bridge: EvenAppBridge
   private initialized = false
@@ -53,100 +51,25 @@ export class G2Display {
 
   constructor(bridge: EvenAppBridge) {
     this.bridge = bridge
-    try {
-      this.canvas = document.createElement('canvas')
-      if (this.canvas) {
-        this.canvas.width = 64
-        this.canvas.height = 64
-      }
-    } catch (e) {
-      console.warn('Canvas not supported in this environment', e)
-      this.canvas = null
-    }
   }
 
   setLang(lang: Lang): void {
     this.lang = lang
   }
 
-  private getIconAsRaw4Bit(iconName: string): number[] | null {
-    if (!this.canvas) return null
-    const draw = ICONS[iconName]
-    if (!draw) return null
-    
-    try {
-      const ctx = this.canvas.getContext('2d', { willReadFrequently: true })
-      if (!ctx) return null
-      
-      ctx.clearRect(0, 0, 64, 64)
-      // Set a black background explicitly (0 in G2 is off)
-      ctx.fillStyle = '#000'
-      ctx.fillRect(0, 0, 64, 64)
-      
-      draw(ctx)
-      
-      const imgData = ctx.getImageData(0, 0, 64, 64).data
-      const raw: number[] = []
-      
-      for (let i = 0; i < 4096; i += 2) {
-        // Pixel 1
-        const r1 = imgData[i * 4]; const g1 = imgData[i * 4 + 1]; const b1 = imgData[i * 4 + 2]
-        // Use perceived luminance for better greyscale
-        const lum1 = (r1 * 0.299 + g1 * 0.587 + b1 * 0.114)
-        const gray1 = Math.min(15, Math.floor(lum1 / 16))
-        
-        // Pixel 2
-        const r2 = imgData[(i + 1) * 4]; const g2 = imgData[(i + 1) * 4 + 1]; const b2 = imgData[(i + 1) * 4 + 2]
-        const lum2 = (r2 * 0.299 + g2 * 0.587 + b2 * 0.114)
-        const gray2 = Math.min(15, Math.floor(lum2 / 16))
-        
-        // High nibble: Pixel 1, Low nibble: Pixel 2
-        raw.push(((gray1 & 0x0F) << 4) | (gray2 & 0x0F))
-      }
-      return raw
-    } catch (e) {
-      console.error('[G2Display] Failed to generate raw 4-bit icon', e)
-      return null
-    }
-  }
-
   async initPage(): Promise<void> {
-    console.log('[G2Display] initPage started')
     const content = this.buildBootScreen()
-    const textContainer = new TextContainerProperty({
+    const container = new TextContainerProperty({
       xPosition: 0, yPosition: 0, width: W, height: H,
       borderWidth: 0, borderColor: 5, paddingLength: PAD,
       containerID: 1, containerName: 'main', content, isEventCapture: 1,
     })
-
-    const imageContainer = new ImageContainerProperty({
-      xPosition: 480, yPosition: 20, width: 64, height: 64,
-      containerID: 2, containerName: 'icon'
-    })
-
-    console.log('[G2Display] Creating start up page containers...')
-    try {
-      const startUpContainer = new CreateStartUpPageContainer({ 
-        containerTotalNum: 2, 
-        textObject: [textContainer],
-        imageObject: [imageContainer]
-      })
-      
-      const result = await Promise.race([
-        this.bridge.createStartUpPageContainer(startUpContainer),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('initPage timeout')), 5000))
-      ])
-      
-      console.log('[G2Display] createStartUpPageContainer result:', result)
-    } catch (e) {
-      console.error('[G2Display] createStartUpPageContainer failed:', e)
-      throw e
-    }
-
+    await this.bridge.createStartUpPageContainer(
+      new CreateStartUpPageContainer({ containerTotalNum: 1, textObject: [container] })
+    )
     this.lastContent = content
     await new Promise(r => setTimeout(r, 800))
     this.initialized = true
-    console.log('[G2Display] initPage completed')
   }
 
   async update(content: string): Promise<void> {

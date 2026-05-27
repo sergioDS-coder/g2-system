@@ -54,7 +54,6 @@ let currentScreen: Screen = 'boot'
 let display: G2Display
 let bridge: Awaited<ReturnType<typeof waitForEvenAppBridge>>
 let supabase: SupabaseClient
-let isInitializing = false
 
 let player: PlayerProfile | null = null
 let quests: DailyQuest[] = []
@@ -113,73 +112,22 @@ function charsetLen(): number {
 // ─── Avvio ────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('[Main] Starting app...')
-  
-  // Gestione errori globale
-  window.addEventListener('error', (e) => {
-    console.error('[Global Error]', e.error)
-  })
-  window.addEventListener('unhandledrejection', (e) => {
-    console.error('[Unhandled Rejection]', e.reason)
-  })
+  bridge = await waitForEvenAppBridge()
+  initBridgeStorage(bridge as any)
+  display = new G2Display(bridge)
+  await display.initPage()
 
-  try {
-    console.log('[Main] Waiting for bridge (with timeout)...')
-    // Increased timeout to 10 seconds for robustness
-    try {
-      bridge = await Promise.race([
-        waitForEvenAppBridge(),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Bridge timeout')), 10000))
-      ])
-      console.log('[Main] Bridge ready!')
-    } catch (e) {
-      console.error('[Main] Bridge initialization failed:', e)
-    }
+  const supaUrl = import.meta.env.VITE_SUPABASE_URL as string
+  const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+  supabase = new SupabaseClient(supaUrl, supaKey)
 
-    if (bridge) {
-      initBridgeStorage(bridge as any)
-      display = new G2Display(bridge)
-      setupEventListener()
-      console.log('[Main] Event listener set up.')
-    } else {
-      console.error('[Main] Bridge not available after timeout.')
-    }
-    
-    if (display) {
-      console.log('[Main] Initializing page...')
-      try {
-        await display.initPage()
-        console.log('[Main] Page initialized.')
-        
-        console.log('[Main] Updating initial image...')
-        display.updateImage('sword').catch(e => console.error('[Main] Failed to set initial image', e))
-      } catch (pageErr) {
-        console.error('[Main] Failed to initialize page:', pageErr)
-      }
-    }
-
-    const supaUrl = import.meta.env.VITE_SUPABASE_URL as string
-    const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-    
-    if (!supaUrl || !supaKey) {
-      console.warn('[Main] Supabase credentials missing. Global ranking will be disabled.')
-    }
-    supabase = new SupabaseClient(supaUrl || '', supaKey || '')
-
-    console.log('[Main] Initializing game data...')
-    await initialize()
-    console.log('[Main] App fully started.')
-  } catch (err) {
-    console.error('[Main] Fatal error during startup:', err)
-    if (display) {
-      await display.update(display.buildError('Avvio fallito'))
-    }
-  }
+  await initialize()
+  setupEventListener()
 }
 
 async function initialize() {
-  if (isInitializing) return
-  isInitializing = true
+  const setupDone = await isSetupComplete()
+  const savedPlayer = await loadPlayer()
 
   if (!setupDone || !savedPlayer || !savedPlayer.name || savedPlayer.name === 'Player') {
     const netlifyPlayer = readNetlifyPlayer()
@@ -198,9 +146,9 @@ async function initialize() {
     player = normalizePlayer(savedPlayer)
   }
 
-    const setupDone = await isSetupComplete()
-    const savedPlayer = await loadPlayer()
-    console.log('[Init] Setup done:', setupDone, 'Player loaded:', !!savedPlayer)
+  display.setLang(player.language as Lang)
+  quests = await loadQuests()
+  const today = new Date().toISOString().slice(0, 10)
 
   // ─── Apply Guaritore pending recovery at start of new day ────────────────
   if (player.lastDailyDate !== today && player.abilityState.pendingRecovery > 0) {
@@ -224,11 +172,9 @@ async function initialize() {
 
       // ─── Assassino weekly skip ─────────────────────────────────────────────
       if (player.playerClass === 'assassino' && isWeeklySkipAvailable(player.abilityState.weeklySkipUsed)) {
-        // Skip penalty entirely
         player.abilityState.weeklySkipUsed = today
         warningExpLost = 0
         await savePlayer(player)
-        // Still show warning but with 0 loss
         warningIdx = 0; currentScreen = 'warning'
         await display.update(display.buildWarningScreen(0, warningIdx))
         return
@@ -275,18 +221,8 @@ async function initialize() {
       allDoneIdx = 0; currentScreen = 'allDone'
       await display.update(display.buildAllDoneScreen(allDoneIdx))
     } else {
-      const allDone = quests.length > 0 && quests.every(q => q.completed)
-      if (allDone) {
-        allDoneIdx = 0; currentScreen = 'allDone'
-        if (display) {
-          await display.update(display.buildAllDoneScreen(allDoneIdx))
-        }
-      } else {
-        await goToQuestList()
-      }
+      await goToQuestList()
     }
-  } finally {
-    isInitializing = false
   }
 }
 
@@ -336,18 +272,10 @@ async function startChangeName() {
 
 async function goToQuestList() {
   currentScreen = 'questList'; questIdx = 0
-  if (quests[questIdx]) {
-    await display.updateImage(quests[questIdx].icon)
-  } else {
-    await display.updateImage("sword")
-  }
   await display.update(display.buildQuestList(quests, questIdx))
 }
 
 async function refreshQuestList() {
-  if (quests[questIdx]) {
-    await display.updateImage(quests[questIdx].icon)
-  }
   await display.update(display.buildQuestList(quests, questIdx))
 }
 
