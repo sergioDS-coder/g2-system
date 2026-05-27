@@ -17,7 +17,7 @@ import type { RankingEntry } from './supabase-client'
 import type { Lang } from './i18n'
 import { t } from './i18n'
 import { renderQuestImages, renderWelcomeImage, type QuestCardInfo, IMG_W, IMG_H } from './quest-image'
-import { renderArtifactImage, ART_IMG_W, ART_IMG_H } from './artifact-image'
+import { renderArtifactImage, renderClassImage, ART_IMG_W, ART_IMG_H } from './artifact-image'
 
 const W = 576
 const H = 288
@@ -231,21 +231,35 @@ export class G2Display {
     }
   }
 
-  /** Profile screen with rank card image on the left + stats on the right */
-  async showProfile(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0): Promise<void> {
+  /** Profile screen: class icon on the left (or rank card if no class) + stats on the right */
+  async showProfile(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0, page = 0): Promise<void> {
     if (!this.initialized) return
-    const content = this.buildProfileNarrow(player, rankPosition, selectedIdx)
-    const imgs = await renderWelcomeImage(player.rank)
-    const imageKey = 'rank_' + player.rank
+    const content = this.buildProfileNarrow(player, rankPosition, selectedIdx, page)
+
+    let topData: number[]
+    let botData: number[]
+    let imageKey: string
+
+    if (player.playerClass) {
+      const classImg = await renderClassImage(player.playerClass)
+      topData = classImg.slice(0, ART_IMG_W * (ART_IMG_H / 2))
+      botData = classImg.slice(ART_IMG_W * (ART_IMG_H / 2))
+      imageKey = 'class_' + player.playerClass
+    } else {
+      const rankImgs = await renderWelcomeImage(player.rank)
+      topData = rankImgs[0]
+      botData = rankImgs[1]
+      imageKey = 'rank_' + player.rank
+    }
 
     if (!this.inImageMode) {
       this.inImageMode = true
       this.lastContent = content
       const ok = await this._rebuildWithImages(content)
       if (ok) {
-        const [r1, r2] = await this._sendImages(imgs[0], imgs[1])
+        const [r1, r2] = await this._sendImages(topData, botData)
         this.lastImageTemplateId = imageKey
-        await this._showImgDiag(content, r1, r2, imgs[0].length, imgs[1].length)
+        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
       }
     } else {
       if (content !== this.lastContent) {
@@ -260,9 +274,9 @@ export class G2Display {
         }
       }
       if (this.lastImageTemplateId !== imageKey) {
-        const [r1, r2] = await this._sendImages(imgs[0], imgs[1])
+        const [r1, r2] = await this._sendImages(topData, botData)
         this.lastImageTemplateId = imageKey
-        await this._showImgDiag(content, r1, r2, imgs[0].length, imgs[1].length)
+        await this._showImgDiag(content, r1, r2, topData.length, botData.length)
       }
     }
   }
@@ -284,25 +298,22 @@ export class G2Display {
     ].join('\n')
   }
 
-  /** Profile text for narrow right column (right of rank card image, ~19 chars/line) */
-  buildProfileNarrow(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0): string {
+  /** Profile text for narrow right column (~19 chars/line).
+   *  page=0: stats + class/ability  |  page=1: artifacts list */
+  buildProfileNarrow(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0, page = 0): string {
     const tr = t(this.lang)
     const a = player.attributes
     const rankPos = rankPosition ? `#${rankPosition}` : '-'
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
     const name = truncate(player.name, 13)
 
-    // Page 0 (selectedIdx 0-2): stats + class/ability
-    // Page 3: artifacts list
-    // Navigation items at bottom: 0=Ranking, 1=Name, 2=Back
     const cls = player.playerClass
     const clsKey = cls ? ('class' + cls.charAt(0).toUpperCase() + cls.slice(1).replace('_', '')) as keyof typeof tr : null
     const className = cls ? (clsKey && (tr as any)[clsKey] ? (tr as any)[clsKey] : cls) : '-'
     const abilityName = cls ? getClassAbilityName(cls) : '-'
 
-    const artifacts = player.artifacts ?? []
-    if (selectedIdx === 3) {
-      // Artifacts page
+    if (page === 1) {
+      const artifacts = player.artifacts ?? []
       const artifactLines: string[] = []
       if (artifacts.length === 0) {
         artifactLines.push(tr.noArtifacts)
@@ -318,29 +329,28 @@ export class G2Display {
       }
       return [
         `${name} ${rankPos}`,
-        `${tr.artifact}`,
+        `── ${tr.artifact} ──`,
         SHORT_LINE,
-        ...artifactLines.slice(0, 5),
+        ...artifactLines.slice(0, 6),
         SHORT_LINE,
-        `${c(0)} Ranking`,
-        `${c(1)} Name`,
-        `${c(2)} Back`,
+        `▶ Back`,
       ].join('\n')
     }
 
+    // page === 0: stats + class/ability
     return [
       `${name} ${rankPos}`,
       `Lv.${player.level} · ${player.rank}`,
       SHORT_LINE,
       `EXP:${player.expCurrent}/${player.expTotal}`,
-      SHORT_LINE,
       `${tr.attrFor}:${a.str} ${tr.attrAgi}:${a.agi} ${tr.attrVit}:${a.vit}`,
-      `${tr.attrInt}:${a.int} ${tr.attrEnd}:${a.end}  Q:${player.questsCompleted}`,
-      `Cls:${truncate(className, 10)} ${truncate(abilityName, 7)}`,
+      `${tr.attrInt}:${a.int} ${tr.attrEnd}:${a.end} Q:${player.questsCompleted}`,
+      `Cls:${truncate(className, 9)} ${truncate(abilityName, 7)}`,
       SHORT_LINE,
       `${c(0)} Ranking`,
-      `${c(1)} Name`,
-      `${c(2)} Back`,
+      `${c(1)} Artifacts`,
+      `${c(2)} Name`,
+      `${c(3)} Back`,
     ].join('\n')
   }
 

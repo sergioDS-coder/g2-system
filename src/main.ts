@@ -63,6 +63,7 @@ let myRankPos: number | null = null
 
 let questIdx   = 0
 let profileIdx = 0
+let profilePage = 0
 let detailIdx  = 0
 let rankingIdx = 0
 let allDoneIdx = 0
@@ -281,9 +282,9 @@ async function refreshQuestList() {
 }
 
 async function goToProfile() {
-  currentScreen = 'profile'; profileIdx = 0
+  currentScreen = 'profile'; profileIdx = 0; profilePage = 0
   myRankPos = await supabase.getPlayerRank(player!.playerId)
-  await display.showProfile(player!, myRankPos, profileIdx)
+  await display.showProfile(player!, myRankPos, profileIdx, profilePage)
 }
 
 async function goToRanking() {
@@ -489,9 +490,18 @@ async function handleLevelUpPress() {
 }
 
 async function handleProfilePress() {
-  if (profileIdx === 1) await startChangeName()
-  else if (profileIdx === 2) await goToQuestList()
-  else await goToRanking()
+  if (profilePage === 1) {
+    profilePage = 0; profileIdx = 0
+    await display.showProfile(player!, myRankPos, profileIdx, profilePage)
+  } else {
+    if (profileIdx === 0) await goToRanking()
+    else if (profileIdx === 1) {
+      profilePage = 1; profileIdx = 0
+      await display.showProfile(player!, myRankPos, profileIdx, profilePage)
+    }
+    else if (profileIdx === 2) await startChangeName()
+    else await goToQuestList()
+  }
 }
 
 async function handleArtifactRewardPress() {
@@ -547,7 +557,7 @@ async function handleSwipeUp() {
     case 'rankUp':
       rankUpIdx = Math.max(0, rankUpIdx - 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
-      if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
+      if (profilePage === 0 && profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx, profilePage) } break
     case 'ranking':
       if (rankingIdx > 0) {
         rankingIdx--; await display.update(display.buildRanking(ranking, rankingPage, rankingIdx))
@@ -579,7 +589,7 @@ async function handleSwipeDown() {
     case 'rankUp':
       rankUpIdx = Math.min(1, rankUpIdx + 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
-      if (profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
+      if (profilePage === 0 && profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx, profilePage) } break
     case 'ranking': {
       const itemsPerPage = 4
       const totalPages = Math.ceil(ranking.length / itemsPerPage)
