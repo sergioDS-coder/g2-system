@@ -6,11 +6,13 @@ import {
 } from '@evenrealities/even_hub_sdk'
 
 import {
-  type PlayerProfile, type Rank,
+  type PlayerProfile, type Rank, type AbilityState,
   addExp, subtractExp, applyPenalty, incrementQuestCount,
   createDefaultPlayer, getQuestsPerDay,
+  isWeeklySkipAvailable,
 } from './game-engine'
 
+import { rollArtifactReward, calcExpMultiplier, calcPenaltyReduction, type ArtifactId } from './artifact-data'
 import { type DailyQuest, generateDailyQuests } from './quest-data'
 import { generateDailyQuestsAI, generateJollyQuest } from './ai-quest'
 import { SupabaseClient, type RankingEntry } from './supabase-client'
@@ -22,12 +24,31 @@ import {
 } from './storage'
 import type { Lang } from './i18n'
 
+// ─── Normalize player (migration for existing players without new fields) ────
+
+function normalizePlayer(p: PlayerProfile): PlayerProfile {
+  return {
+    ...p,
+    playerClass: p.playerClass ?? null,
+    artifacts: p.artifacts ?? [],
+    abilityState: p.abilityState ?? {
+      strQuestStreak: 0,
+      intQuestStreak: 0,
+      weeklySkipUsed: '',
+      pendingRecovery: 0,
+      adaptationDate: '',
+      dailyAttrsCompleted: [],
+    } satisfies AbilityState,
+  }
+}
+
 // ─── Stato globale ────────────────────────────────────────────────────────────
 
 type Screen =
   | 'boot' | 'setup' | 'nameInput' | 'dailyMessage' | 'allDone'
   | 'warning' | 'questList' | 'questDetail'
   | 'levelUp' | 'rankUp' | 'profile' | 'ranking' | 'error'
+  | 'artifactReward'
 
 let currentScreen: Screen = 'boot'
 let display: G2Display
@@ -53,6 +74,9 @@ let warningIdx = 0
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
 let warningExpLost = 0
+
+let pendingArtifact: ArtifactId | null = null
+let artifactIdx = 0
 
 // ─── Inserimento nome, lingua e privacy ───────────────────────────────────────
 
@@ -107,9 +131,10 @@ async function initialize() {
   if (!setupDone || !savedPlayer || !savedPlayer.name || savedPlayer.name === 'Player') {
     const netlifyPlayer = readNetlifyPlayer()
     if (netlifyPlayer?.name && netlifyPlayer.name !== 'Player') {
-      await savePlayer(netlifyPlayer)
+      const normalized = normalizePlayer(netlifyPlayer)
+      await savePlayer(normalized)
       await saveSetupComplete()
-      player = netlifyPlayer
+      player = normalized
     } else {
       nameBuffer = ''; charIdx = 0; inputStep = 'name'; isChangingName = false
       currentScreen = 'nameInput'
@@ -117,19 +142,59 @@ async function initialize() {
       return
     }
   } else {
-    player = savedPlayer
+    player = normalizePlayer(savedPlayer)
   }
 
   display.setLang(player.language as Lang)
   quests = await loadQuests()
   const today = new Date().toISOString().slice(0, 10)
 
+  // ─── Apply Guaritore pending recovery at start of new day ────────────────
+  if (player.lastDailyDate !== today && player.abilityState.pendingRecovery > 0) {
+    const recovery = player.abilityState.pendingRecovery
+    player.expTotal += recovery
+    player.expCurrent += recovery
+    player.abilityState.pendingRecovery = 0
+    await savePlayer(player)
+  }
+
+  // ─── Reset Ranger daily tracking for new day ──────────────────────────────
+  if (player.lastDailyDate !== today) {
+    player.abilityState.dailyAttrsCompleted = []
+    player.abilityState.adaptationDate = today
+  }
+
   if (player.lastDailyDate !== today) {
     const missed = quests.filter(q => !q.completed && q.date === player!.lastDailyDate)
     if (missed.length > 0 && player.lastDailyDate) {
-      const lost = missed.reduce((s, q) => s + Math.floor(q.expReward * 0.5), 0)
-      player = applyPenalty(player, lost)
-      warningExpLost = lost
+      const rawLost = missed.reduce((s, q) => s + Math.floor(q.expReward * 0.5), 0)
+
+      // ─── Assassino weekly skip ─────────────────────────────────────────────
+      if (player.playerClass === 'assassino' && isWeeklySkipAvailable(player.abilityState.weeklySkipUsed)) {
+        // Skip penalty entirely
+        player.abilityState.weeklySkipUsed = today
+        warningExpLost = 0
+        await savePlayer(player)
+        // Still show warning but with 0 loss
+        warningIdx = 0; currentScreen = 'warning'
+        await display.update(display.buildWarningScreen(0, warningIdx))
+        return
+      }
+
+      // ─── Calculate penalty with reductions ────────────────────────────────
+      const artifactReduction = calcPenaltyReduction(player.artifacts)
+      const classReduction = player.playerClass === 'carro_armato' ? 0.20 : 0
+      const totalReduction = Math.min(0.90, artifactReduction + classReduction)
+      const actualLost = Math.round(rawLost * (1 - totalReduction))
+
+      player = applyPenalty(player, actualLost)
+      warningExpLost = actualLost
+
+      // ─── Guaritore: 10% of penalty queued for next morning recovery ───────
+      if (player.playerClass === 'guaritore') {
+        player.abilityState.pendingRecovery += Math.round(actualLost * 0.10)
+      }
+
       await savePlayer(player)
       warningIdx = 0; currentScreen = 'warning'
       await display.update(display.buildWarningScreen(warningExpLost, warningIdx))
@@ -236,10 +301,44 @@ async function completeQuest() {
   q.completed = true
   await saveQuests(quests)
 
-  const result = addExp(player!, q.expReward, q.attribute)
+  // Calculate EXP multiplier from artifacts
+  const expMultiplier = calcExpMultiplier(player!.artifacts, q.attribute)
+
+  const result = addExp(player!, q.expReward, q.attribute, expMultiplier)
   player = incrementQuestCount(result.player)
+
+  // ─── Ranger Adattamento bonus ─────────────────────────────────────────────
+  if (player.playerClass === 'ranger') {
+    const today = new Date().toISOString().slice(0, 10)
+    if (player.abilityState.adaptationDate !== today) {
+      player.abilityState.adaptationDate = today
+      player.abilityState.dailyAttrsCompleted = []
+    }
+    if (!player.abilityState.dailyAttrsCompleted.includes(q.attribute)) {
+      player.abilityState.dailyAttrsCompleted.push(q.attribute)
+      if (player.abilityState.dailyAttrsCompleted.length === 3) {
+        // Exactly 3 unique attrs: bonus 100 EXP
+        player.expTotal += 100
+        player.expCurrent += 100
+      }
+    }
+  }
+
   await savePlayer(player)
   await supabase.upsertPlayer(player)
+
+  // ─── Jolly quest: roll artifact reward ───────────────────────────────────
+  if (q.type === 'jolly') {
+    const rolled = rollArtifactReward(player.playerClass, player.artifacts)
+    if (rolled) {
+      pendingArtifact = rolled
+      pendingLevelUp = result.leveledUp ? { oldLevel: result.oldLevel } : pendingLevelUp
+      pendingRankUp = result.rankedUp ? { oldRank: result.oldRank } : pendingRankUp
+      artifactIdx = 0; currentScreen = 'artifactReward'
+      await display.update(display.buildArtifactReward(rolled))
+      return
+    }
+  }
 
   const allDone = quests.every(q => q.completed)
   if (result.rankedUp) {
@@ -322,7 +421,8 @@ async function handlePress() {
     rankUp: async () => { if (rankUpIdx === 1) await bridge.shutDownPageContainer(0); else { pendingRankUp = null; await goToQuestList() } },
     profile: handleProfilePress,
     ranking: async () => { if (rankingIdx === 4) await goToProfile() },
-    error: async () => { await initialize() }
+    error: async () => { await initialize() },
+    artifactReward: handleArtifactRewardPress,
   }
 
   const handler = handlers[currentScreen]
@@ -394,6 +494,36 @@ async function handleProfilePress() {
   else await goToRanking()
 }
 
+async function handleArtifactRewardPress() {
+  if (!pendingArtifact || !player) {
+    await goToQuestList()
+    return
+  }
+
+  // Confirm artifact: add to player
+  player.artifacts.push(pendingArtifact)
+  await savePlayer(player)
+  await supabase.upsertPlayer(player)
+  pendingArtifact = null
+
+  const allDone = quests.every(q => q.completed)
+
+  if (pendingRankUp) {
+    const r = pendingRankUp.oldRank; pendingRankUp = null
+    rankUpIdx = 0; currentScreen = 'rankUp'
+    await display.update(display.buildRankUp(player, r, rankUpIdx))
+  } else if (pendingLevelUp) {
+    const lvl = pendingLevelUp.oldLevel; pendingLevelUp = null
+    levelIdx = 0; currentScreen = 'levelUp'
+    await display.update(display.buildLevelUp(player, lvl, levelIdx))
+  } else if (allDone) {
+    allDoneIdx = 0; currentScreen = 'allDone'
+    await display.update(display.buildAllDoneScreen(allDoneIdx))
+  } else {
+    await goToQuestList()
+  }
+}
+
 // ─── Handlers Swipe ───────────────────────────────────────────────────────────
 
 async function handleSwipeUp() {
@@ -449,7 +579,7 @@ async function handleSwipeDown() {
     case 'rankUp':
       rankUpIdx = Math.min(1, rankUpIdx + 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
-      if (profileIdx < 2) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
+      if (profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
     case 'ranking': {
       const itemsPerPage = 4
       const totalPages = Math.ceil(ranking.length / itemsPerPage)
