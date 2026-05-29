@@ -289,6 +289,29 @@ async function goToProfile() {
   supabase.getPlayerRank(player!.playerId).then(r => { myRankPos = r ?? myRankPos }).catch(() => {})
 }
 
+async function refreshCurrentScreen() {
+  if (!player) return
+  try {
+    switch (currentScreen) {
+      case 'questList':   await display.showQuestList(quests, questIdx); break
+      case 'questDetail': await display.showQuestDetail(quests[questIdx], detailIdx); break
+      case 'profile':     await display.showProfile(player, myRankPos, profileIdx); break
+      case 'dailyMessage': await display.showDailyMessage(player.rank, player.level, msgIdx); break
+      case 'allDone':     await display.update(display.buildAllDoneScreen(allDoneIdx)); break
+      case 'warning':     await display.update(display.buildWarningScreen(warningExpLost, warningIdx)); break
+      case 'levelUp':     await display.update(display.buildLevelUp(player, pendingLevelUp?.oldLevel ?? player.level - 1, levelIdx)); break
+      case 'rankUp':      await display.update(display.buildRankUp(player, pendingRankUp?.oldRank ?? player.rank as Rank, rankUpIdx)); break
+      case 'ranking':     await display.update(display.buildRanking(ranking, rankingPage, rankingIdx, supabase.lastRankingError)); break
+      case 'rankingDetail': if (selectedRankingEntry) await display.update(display.buildRankingDetail(selectedRankingEntry, rankingPage * 4 + rankingIdx + 1)); break
+      case 'artifacts':   await display.update(display.buildArtifactList(player)); break
+      case 'artifactReward': if (pendingArtifact) await display.showArtifactReward(pendingArtifact); break
+      default: break
+    }
+  } catch (e) {
+    console.error('[G2] refreshCurrentScreen failed:', e)
+  }
+}
+
 async function goToArtifacts() {
   currentScreen = 'artifacts'
   await display.update(display.buildArtifactList(player!))
@@ -407,7 +430,16 @@ function setupEventListener() {
 
     // ─── Lifecycle ────────────────────────────────────────────────────────
     if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
-      handlingInput = false; pendingPress = false; return
+      // User returned to the glasses: clear locks and restore screen
+      handlingInput = false; pendingPress = false
+      await refreshCurrentScreen()
+      return
+    }
+    if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
+      // User switched to the phone: show pause overlay
+      handlingInput = false; pendingPress = false
+      try { await display.update(display.buildPauseScreen()) } catch {}
+      return
     }
     // Filter out exit/IMU events; pass through click/scroll/double/undefined
     if (eventType !== OsEventTypeList.CLICK_EVENT

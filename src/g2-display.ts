@@ -283,6 +283,24 @@ export class G2Display {
     ].join('\n')
   }
 
+  buildPauseScreen(): string {
+    return [
+      LINE,
+      '  G2 SYSTEM — IN PAUSA',
+      LINE,
+      '',
+      "  L'app e' sospesa.",
+      '  Stai usando il telefono.',
+      '',
+      '  Torna nell\'app Even Hub',
+      '  sugli occhiali per',
+      '  continuare.',
+      '',
+      LINE,
+      '  ( anello non attivo )',
+    ].join('\n')
+  }
+
   buildBootScreen(): string {
     const tr = t(this.lang)
     return [
