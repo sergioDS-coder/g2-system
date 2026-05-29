@@ -213,14 +213,14 @@
     </div>
 
     <div class="card">
-      <h2>Class &amp; Abilities</h2>
-      <div class="info-row"><span class="label">Class</span><span class="value" id="classVal">—</span></div>
-      <div class="info-row"><span class="label">Ability</span><span class="value" id="abilityVal">—</span></div>
+      <h2>Classe &amp; Abilità</h2>
+      <div class="info-row"><span class="label">Classe</span><span class="value" id="classVal">—</span></div>
+      <div class="info-row"><span class="label">Abilità</span><span class="value" id="abilityVal">—</span></div>
     </div>
 
     <div class="card" id="artifactsCard">
-      <h2>Artifacts</h2>
-      <div id="artifactsList" style="color:#8090b0;font-size:0.9rem;">No artifacts yet</div>
+      <h2>Artefatti</h2>
+      <div id="artifactsList" style="color:#8090b0;font-size:0.9rem;">Nessun artefatto ancora</div>
     </div>
 
     <div class="card">
@@ -251,15 +251,15 @@
       ranger: 'Adattamento', guaritore: 'Rigenerazione',
     }
     const ARTIFACT_NAMES = {
-      gauntlets_warrior: 'Gauntlets of the Warrior',
-      shadow_cloak: 'Shadow Cloak',
-      ancient_tome: 'Ancient Tome',
-      iron_shield: 'Iron Shield',
-      dual_scope: 'Dual Scope',
-      elixir_flask: 'Elixir Flask',
-      exp_crystal: 'EXP Crystal',
-      endurance_ring: 'Endurance Ring',
-      focus_stone: 'Focus Stone',
+      gauntlets_warrior: 'Guanti del Guerriero',
+      shadow_cloak: 'Mantello Oscuro',
+      ancient_tome: 'Tomo Antico',
+      iron_shield: 'Scudo di Ferro',
+      dual_scope: 'Mirino Duale',
+      elixir_flask: 'Fiala Elisir',
+      exp_crystal: 'Cristallo EXP',
+      endurance_ring: 'Anello Resistenza',
+      focus_stone: 'Pietra Focale',
     }
     const RANK_EXP = { F: 500, E: 1000, D: 2000, C: 4000, B: 8000, A: 15000, S: 30000, SS: 60000, SSS: 100000 }
 
@@ -297,7 +297,7 @@
         document.getElementById('classVal').textContent = CLASS_NAMES[p.playerClass] || p.playerClass
         document.getElementById('abilityVal').textContent = CLASS_ABILITIES[p.playerClass] || '—'
       } else {
-        document.getElementById('classVal').textContent = 'Not assigned yet (reach level 5)'
+        document.getElementById('classVal').textContent = 'Non ancora assegnata (raggiungi il livello 5)'
         document.getElementById('abilityVal').textContent = '—'
       }
 
