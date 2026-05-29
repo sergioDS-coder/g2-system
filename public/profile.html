@@ -7,7 +7,22 @@
   <title>G2 System — Profilo</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-    body { background: linear-gradient(135deg, #000 0%, #0a0e1a 100%); color: #e0e0e0; min-height: 100vh; padding: 20px 20px 80px; }
+    html { height: 100%; background: #000; }
+    body {
+      height: 100%;
+      background: linear-gradient(135deg, #000 0%, #0a0e1a 100%);
+      background-attachment: scroll;
+      color: #e0e0e0;
+    }
+    /* Scroll wrapper: explicit overflow on an inner element is the only
+       pattern that reliably works on iOS Safari without bounce-back */
+    .scroll-wrap {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      overflow-y: scroll;
+      -webkit-overflow-scrolling: touch;
+      padding: 20px 20px 100px;
+    }
     .container { max-width: 600px; margin: 0 auto; }
     .header { text-align: center; padding: 24px 0; }
     .logo { font-size: 1.4rem; font-weight: 900; letter-spacing: 0.3em; color: #00ddff; text-shadow: 0 0 20px rgba(0,221,255,0.6); }
@@ -52,6 +67,7 @@
 </head>
 
 <body>
+  <div class="scroll-wrap">
   <div class="container">
     <div class="header">
       <div class="logo">G2 SYSTEM</div>
@@ -353,6 +369,7 @@
 
     loadProfile()
   </script>
+  </div><!-- /scroll-wrap -->
 </body>
 
 </html>
