@@ -465,6 +465,14 @@ function setupEventListener() {
     if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
       await showPause(); return
     }
+    // Quando l'app è in pausa (telefono in uso): solo il doppio click è attivo
+    // — esce dall'app con il metodo ufficiale Even Hub; tutto il resto ignorato.
+    if (isPaused) {
+      if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
+        await bridge.shutDownPageContainer(1)
+      }
+      return
+    }
     // Filter out exit/IMU events; pass through click/scroll/double/undefined
     if (eventType !== OsEventTypeList.CLICK_EVENT
      && eventType !== OsEventTypeList.DOUBLE_CLICK_EVENT
