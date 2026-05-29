@@ -415,18 +415,20 @@ function setupEventListener() {
     // hold the lock forever — auto-release after a generous timeout.
     const watchdog = setTimeout(() => { handlingInput = false }, 8000)
     try {
+      // Scroll and double-click are handled explicitly; every other input
+      // event is treated as a single press. The press event can arrive with
+      // several different eventType values across firmware/SDK versions
+      // (CLICK_EVENT, 0, undefined, null, …), so a catch-all default is the
+      // only reliable way to never miss a click.
       switch (eventType) {
-        case OsEventTypeList.CLICK_EVENT:
-        case 0:
-        case undefined:
-        case null:
-          await handlePress(); break
         case OsEventTypeList.DOUBLE_CLICK_EVENT:
           await handleDoublePress(); break
         case OsEventTypeList.SCROLL_TOP_EVENT:
           await handleSwipeUp(); break
         case OsEventTypeList.SCROLL_BOTTOM_EVENT:
           await handleSwipeDown(); break
+        default:
+          await handlePress(); break
       }
     } finally {
       clearTimeout(watchdog)
