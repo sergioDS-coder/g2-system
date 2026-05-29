@@ -7,15 +7,7 @@
   <title>G2 System — Profilo</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-    html, body {
-      height: auto;
-      min-height: 100%;
-      overflow-x: hidden;
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      overscroll-behavior-y: contain;
-    }
-    body { background: linear-gradient(135deg, #000 0%, #0a0e1a 100%); color: #e0e0e0; padding: 20px 20px 60px; }
+    body { background: linear-gradient(135deg, #000 0%, #0a0e1a 100%); color: #e0e0e0; min-height: 100vh; padding: 20px 20px 80px; }
     .container { max-width: 600px; margin: 0 auto; }
     .header { text-align: center; padding: 24px 0; }
     .logo { font-size: 1.4rem; font-weight: 900; letter-spacing: 0.3em; color: #00ddff; text-shadow: 0 0 20px rgba(0,221,255,0.6); }
@@ -162,6 +154,27 @@
     }
     const RANK_EXP = { F: 500, E: 1000, D: 2000, C: 4000, B: 8000, A: 15000, S: 30000, SS: 60000, SSS: 100000 }
 
+    // Replica della logica di game-engine.ts — calcola la classe dagli attributi
+    // già presenti in Supabase, senza bisogno della colonna player_class.
+    const CLASS_WEIGHTS = {
+      combattente:  { str: 3, agi: 1, vit: 0, int: 0, end: 0 },
+      assassino:    { str: 1, agi: 3, vit: 0, int: 0, end: 0 },
+      mago:         { str: 0, agi: 0, vit: 0, int: 3, end: 1 },
+      ranger:       { str: 0, agi: 2, vit: 0, int: 2, end: 0 },
+      carro_armato: { str: 0, agi: 0, vit: 1, int: 0, end: 3 },
+      guaritore:    { str: 0, agi: 0, vit: 3, int: 1, end: 0 },
+    }
+    function determineClass(row) {
+      if ((row.level || 1) < 5) return null
+      const attrs = { str: row.str_stat, agi: row.agi_stat, vit: row.vit_stat, int: row.int_stat, end: row.end_stat }
+      let best = null, bestScore = -1
+      for (const [cls, weights] of Object.entries(CLASS_WEIGHTS)) {
+        const score = Object.keys(attrs).reduce((s, k) => s + attrs[k] * weights[k], 0)
+        if (score > bestScore) { bestScore = score; best = cls }
+      }
+      return best
+    }
+
     function setSyncBadge(state, text) {
       const el = document.getElementById('syncBadge')
       el.textContent = text
@@ -205,8 +218,8 @@
       document.getElementById('privacyVal').textContent = row.privacy || 'public'
       document.getElementById('langVal').textContent = (row.language || 'it').toUpperCase()
 
-      // Class: from Supabase extended col (if exists) or localPlayer fallback
-      const cls = row.player_class ?? localPlayer?.playerClass ?? null
+      // Class: Supabase extended col → localPlayer fallback → compute from attributes
+      const cls = row.player_class ?? localPlayer?.playerClass ?? determineClass(row)
       if (cls) {
         document.getElementById('classVal').textContent = CLASS_NAMES[cls] || cls
         document.getElementById('abilityVal').textContent = CLASS_ABILITIES[cls] || '—'
