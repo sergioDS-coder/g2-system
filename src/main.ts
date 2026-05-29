@@ -386,13 +386,29 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
+    // ─── TEMP DIAGNOSTIC ──────────────────────────────────────────────────
+    // Logs the exact shape of every incoming event so we can see precisely
+    // what a click sends vs a scroll. Remove once click routing is confirmed.
+    try {
+      console.log('[G2-EVENT]', JSON.stringify({
+        top: event?.eventType,
+        text: event?.textEvent?.eventType,
+        sys: event?.sysEvent?.eventType,
+        list: event?.listEvent?.eventType,
+        keys: Object.keys(event ?? {}),
+        raw: event,
+      }))
+    } catch { console.log('[G2-EVENT] (unserializable)', event) }
+
     // Normalize the raw eventType to the SDK enum regardless of whether it
     // arrives as a number (0-8), a full string ("CLICK_EVENT"), or a short
     // string ("CLICK"). fromJson handles all three variants.
     const raw = event.eventType
       ?? event.textEvent?.eventType
       ?? event.sysEvent?.eventType
+      ?? event.listEvent?.eventType
     const eventType = OsEventTypeList.fromJson(raw)
+    console.log('[G2-EVENT] raw=', raw, '→ normalized=', eventType)
 
     // ─── Lifecycle ────────────────────────────────────────────────────────
     // On foreground re-enter, clear the input lock so the glasses are
