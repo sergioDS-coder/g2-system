@@ -66,52 +66,60 @@
       <div class="sync-badge" id="syncBadge">sincronizzazione in corso…</div>
     </div>
 
-    <div class="card" id="mainCard">
-      <div class="player-name" id="playerName">Caricamento…</div>
-      <div class="rank-badge" id="rankBadge">F</div>
-      <div class="level-info">
-        <span>Livello <strong id="levelNum">1</strong></span>
-        <span><span id="expCurrent">0</span> / <span id="expNext">500</span> EXP</span>
-      </div>
-      <div class="progress"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
-      <div class="stats-grid">
-        <div class="stat"><div class="stat-label">STR</div><div class="stat-value" id="statStr">1</div></div>
-        <div class="stat"><div class="stat-label">AGI</div><div class="stat-value" id="statAgi">1</div></div>
-        <div class="stat"><div class="stat-label">VIT</div><div class="stat-value" id="statVit">1</div></div>
-        <div class="stat"><div class="stat-label">INT</div><div class="stat-value" id="statInt">1</div></div>
-        <div class="stat"><div class="stat-label">END</div><div class="stat-value" id="statEnd">1</div></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Classe &amp; Abilità</h2>
-      <div class="info-row"><span class="label">Classe</span><span class="value" id="classVal">—</span></div>
-      <div class="info-row"><span class="label">Abilità</span><span class="value" id="abilityVal">—</span></div>
-    </div>
-
-    <div class="card">
-      <h2>Artefatti</h2>
-      <div id="artifactsList" style="color:#8090b0;font-size:0.9rem;">Nessun artefatto ancora</div>
-    </div>
-
-    <div class="card">
-      <h2>Statistiche</h2>
-      <div class="info-row"><span class="label">EXP Totale</span><span class="value" id="totalExp">0</span></div>
-      <div class="info-row"><span class="label">Quest Completate</span><span class="value" id="questsTotal">0</span></div>
-      <div class="info-row"><span class="label">Privacy</span><span class="value" id="privacyVal">—</span></div>
-      <div class="info-row"><span class="label">Lingua</span><span class="value" id="langVal">—</span></div>
-    </div>
-
-    <!-- Shown only when no account is linked -->
+    <!-- Shown only when no account is linked — placed at top so the keyboard
+         never hides the submit control; submits on Enter -->
     <div class="card" id="searchSection">
       <h2>Collega il tuo profilo</h2>
       <p class="search-desc">
-        Inserisci il tuo nome player (visibile in classifica) per collegare il profilo dagli occhiali.<br>
+        Inserisci il tuo nome player (quello visibile in classifica) e premi
+        <strong>Invio</strong> per collegare il profilo dagli occhiali.<br>
         <strong>Nota:</strong> funziona solo se la privacy è impostata su <em>Pubblica</em>.
       </p>
-      <input class="search-input" type="text" id="searchName" placeholder="Il tuo nome player…" autocomplete="off" />
-      <button class="btn" onclick="searchAndLink()">Cerca e Collega</button>
+      <form id="searchForm" onsubmit="return searchAndLink(event)">
+        <input class="search-input" type="search" id="searchName"
+               placeholder="Il tuo nome player…" autocomplete="off"
+               autocapitalize="off" enterkeyhint="go" />
+        <button class="btn" type="submit">Cerca e Collega</button>
+      </form>
       <div class="search-msg" id="searchMsg"></div>
+    </div>
+
+    <div id="dataCards">
+      <div class="card" id="mainCard">
+        <div class="player-name" id="playerName">Caricamento…</div>
+        <div class="rank-badge" id="rankBadge">F</div>
+        <div class="level-info">
+          <span>Livello <strong id="levelNum">1</strong></span>
+          <span><span id="expCurrent">0</span> / <span id="expNext">500</span> EXP</span>
+        </div>
+        <div class="progress"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+        <div class="stats-grid">
+          <div class="stat"><div class="stat-label">STR</div><div class="stat-value" id="statStr">1</div></div>
+          <div class="stat"><div class="stat-label">AGI</div><div class="stat-value" id="statAgi">1</div></div>
+          <div class="stat"><div class="stat-label">VIT</div><div class="stat-value" id="statVit">1</div></div>
+          <div class="stat"><div class="stat-label">INT</div><div class="stat-value" id="statInt">1</div></div>
+          <div class="stat"><div class="stat-label">END</div><div class="stat-value" id="statEnd">1</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Classe &amp; Abilità</h2>
+        <div class="info-row"><span class="label">Classe</span><span class="value" id="classVal">—</span></div>
+        <div class="info-row"><span class="label">Abilità</span><span class="value" id="abilityVal">—</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Artefatti</h2>
+        <div id="artifactsList" style="color:#8090b0;font-size:0.9rem;">Nessun artefatto ancora</div>
+      </div>
+
+      <div class="card">
+        <h2>Statistiche</h2>
+        <div class="info-row"><span class="label">EXP Totale</span><span class="value" id="totalExp">0</span></div>
+        <div class="info-row"><span class="label">Quest Completate</span><span class="value" id="questsTotal">0</span></div>
+        <div class="info-row"><span class="label">Privacy</span><span class="value" id="privacyVal">—</span></div>
+        <div class="info-row"><span class="label">Lingua</span><span class="value" id="langVal">—</span></div>
+      </div>
     </div>
 
     <div class="nav">
@@ -283,15 +291,19 @@
         }
       }
 
-      // No linked account at all
-      document.getElementById('playerName').textContent = 'Nessun profilo collegato'
+      // No linked account at all — show only the link form (data cards hidden)
+      document.getElementById('dataCards').style.display = 'none'
       document.getElementById('searchSection').style.display = 'block'
-      setSyncBadge('err', 'Collega il tuo account per vedere il profilo')
+      setSyncBadge('err', 'Nessun profilo collegato — collega il tuo account')
     }
 
-    async function searchAndLink() {
-      const name = document.getElementById('searchName').value.trim()
-      if (!name) return
+    async function searchAndLink(event) {
+      if (event) event.preventDefault()
+      const input = document.getElementById('searchName')
+      const name = input.value.trim()
+      if (!name) return false
+      // Dismiss the iOS keyboard so the result/message is visible
+      input.blur()
       const msg = document.getElementById('searchMsg')
       msg.textContent = 'Ricerca in corso…'
       msg.className = 'search-msg'
@@ -300,7 +312,7 @@
         if (!rows.length) {
           msg.textContent = 'Nessun profilo pubblico trovato con questo nome.'
           msg.className = 'search-msg err'
-          return
+          return false
         }
         const row = rows[0]
         // Save playerId to localStorage for future visits
@@ -310,12 +322,14 @@
         localStorage.setItem('g2sys_player', JSON.stringify(localPlayer))
 
         document.getElementById('searchSection').style.display = 'none'
+        document.getElementById('dataCards').style.display = 'block'
         renderRow(row, null)
         setSyncBadge('ok', '✓ Profilo collegato e sincronizzato')
       } catch (e) {
         msg.textContent = 'Errore di rete. Riprova.'
         msg.className = 'search-msg err'
       }
+      return false
     }
 
     function unlinkAccount() {
