@@ -121,7 +121,7 @@ export function createDefaultPlayer(playerId: string, name: string, lang: string
     expCurrent: 0,
     attributes: { str: 1, agi: 1, vit: 1, int: 1, end: 1 },
     questsCompleted: 0,
-    privacy: 'anonymous',
+    privacy: 'public',
     language: lang,
     lastDailyDate: '',
     playerClass: null,

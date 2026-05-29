@@ -157,13 +157,13 @@
       <div class="field">
         <label>Ranking Privacy</label>
         <div class="privacy-row">
-          <div class="privacy-btn" data-value="public">Public</div>
-          <div class="privacy-btn active" data-value="anonymous">Anonymous</div>
+          <div class="privacy-btn active" data-value="public">Public</div>
+          <div class="privacy-btn" data-value="anonymous">Anonymous</div>
           <div class="privacy-btn" data-value="private">Private</div>
         </div>
       </div>
 
-      <input type="hidden" id="privacyValue" value="anonymous" />
+      <input type="hidden" id="privacyValue" value="public" />
 
       <button type="submit" class="btn">⚔ Save Configuration</button>
     </form>
@@ -225,6 +225,13 @@
           attributes: { str: 1, agi: 1, vit: 1, int: 1, end: 1 },
           questsCompleted: 0, lastDailyDate: '',
           language: 'it',
+          playerClass: null,
+          artifacts: [],
+          abilityState: {
+            strQuestStreak: 0, intQuestStreak: 0,
+            weeklySkipUsed: '', pendingRecovery: 0,
+            adaptationDate: '', dailyAttrsCompleted: [],
+          },
         }
       }
 

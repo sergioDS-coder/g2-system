@@ -213,6 +213,17 @@
     </div>
 
     <div class="card">
+      <h2>Class &amp; Abilities</h2>
+      <div class="info-row"><span class="label">Class</span><span class="value" id="classVal">—</span></div>
+      <div class="info-row"><span class="label">Ability</span><span class="value" id="abilityVal">—</span></div>
+    </div>
+
+    <div class="card" id="artifactsCard">
+      <h2>Artifacts</h2>
+      <div id="artifactsList" style="color:#8090b0;font-size:0.9rem;">No artifacts yet</div>
+    </div>
+
+    <div class="card">
       <h2>Statistics</h2>
       <div class="info-row"><span class="label">Total EXP</span><span class="value" id="totalExp">0</span></div>
       <div class="info-row"><span class="label">Quests Completed</span><span class="value" id="questsTotal">0</span>
@@ -229,6 +240,29 @@
   </div>
 
   <script>
+    const CLASS_NAMES = {
+      combattente: 'Combattente', carro_armato: 'Carro Armato',
+      assassino: 'Assassino', mago: 'Mago',
+      ranger: 'Ranger', guaritore: 'Guaritore',
+    }
+    const CLASS_ABILITIES = {
+      combattente: 'Berserker', carro_armato: 'Fortezza',
+      assassino: 'Furtività', mago: 'Amplificazione',
+      ranger: 'Adattamento', guaritore: 'Rigenerazione',
+    }
+    const ARTIFACT_NAMES = {
+      gauntlets_warrior: 'Gauntlets of the Warrior',
+      shadow_cloak: 'Shadow Cloak',
+      ancient_tome: 'Ancient Tome',
+      iron_shield: 'Iron Shield',
+      dual_scope: 'Dual Scope',
+      elixir_flask: 'Elixir Flask',
+      exp_crystal: 'EXP Crystal',
+      endurance_ring: 'Endurance Ring',
+      focus_stone: 'Focus Stone',
+    }
+    const RANK_EXP = { F: 500, E: 1000, D: 2000, C: 4000, B: 8000, A: 15000, S: 30000, SS: 60000, SSS: 100000 }
+
     function loadPlayer() {
       const raw = localStorage.getItem('g2sys_player')
       if (!raw) {
@@ -237,7 +271,6 @@
       }
       const p = JSON.parse(raw)
 
-      const RANK_EXP = { F: 500, E: 1000, D: 2000, C: 4000, B: 8000, A: 15000, S: 30000, SS: 60000, SSS: 100000 }
       const expNext = RANK_EXP[p.rank] || 500
 
       document.getElementById('playerName').textContent = p.name || 'Player'
@@ -256,8 +289,26 @@
 
       document.getElementById('totalExp').textContent = (p.expTotal || 0).toLocaleString()
       document.getElementById('questsTotal').textContent = p.questsCompleted || 0
-      document.getElementById('privacyVal').textContent = p.privacy || 'anonymous'
+      document.getElementById('privacyVal').textContent = p.privacy || 'public'
       document.getElementById('langVal').textContent = (p.language || 'it').toUpperCase()
+
+      // Class & ability
+      if (p.playerClass) {
+        document.getElementById('classVal').textContent = CLASS_NAMES[p.playerClass] || p.playerClass
+        document.getElementById('abilityVal').textContent = CLASS_ABILITIES[p.playerClass] || '—'
+      } else {
+        document.getElementById('classVal').textContent = 'Not assigned yet (reach level 5)'
+        document.getElementById('abilityVal').textContent = '—'
+      }
+
+      // Artifacts
+      const arts = p.artifacts || []
+      if (arts.length > 0) {
+        document.getElementById('artifactsList').innerHTML = arts.map(id => {
+          const name = ARTIFACT_NAMES[id] || id
+          return `<div class="info-row"><span class="label">✦</span><span class="value">${name}</span></div>`
+        }).join('')
+      }
     }
 
     loadPlayer()
