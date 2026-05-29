@@ -47,6 +47,22 @@ export class SupabaseClient {
     return !!(this.url && this.key)
   }
 
+  /**
+   * fetch con timeout via AbortController. Fondamentale: le chiamate Supabase
+   * sono await-ate dentro il lock di input (handlingInput) dell'app occhiali.
+   * Senza timeout, una rete bloccata terrebbe il lock per sempre e l'app non
+   * risponderebbe più ad anello/aste.
+   */
+  private async fetchWithTimeout(url: string, init: RequestInit, ms = 6000): Promise<Response> {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), ms)
+    try {
+      return await fetch(url, { ...init, signal: controller.signal })
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+
   private headers() {
     return {
       'apikey': this.key,
@@ -91,13 +107,13 @@ export class SupabaseClient {
 
     try {
       // Try with extended fields (class + artifacts); fall back if columns don't exist yet
-      const r1 = await fetch(`${this.url}/rest/v1/players?on_conflict=player_id`, {
+      const r1 = await this.fetchWithTimeout(`${this.url}/rest/v1/players?on_conflict=player_id`, {
         ...opts, body: JSON.stringify(extendedRow),
       })
       if (r1.ok) return true
 
       // Extended columns may not exist — retry with base fields only
-      const r2 = await fetch(`${this.url}/rest/v1/players?on_conflict=player_id`, {
+      const r2 = await this.fetchWithTimeout(`${this.url}/rest/v1/players?on_conflict=player_id`, {
         ...opts, body: JSON.stringify(baseRow),
       })
       return r2.ok
@@ -116,7 +132,7 @@ export class SupabaseClient {
       return []
     }
     try {
-      const response = await fetch(
+      const response = await this.fetchWithTimeout(
         `${this.url}/rest/v1/players?select=*&privacy=in.(public,anonymous)&order=exp_total.desc&limit=${limit}`,
         { headers: this.headers() }
       )

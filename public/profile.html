@@ -7,7 +7,15 @@
   <title>G2 System — Profilo</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
-    body { background: linear-gradient(135deg, #000 0%, #0a0e1a 100%); color: #e0e0e0; min-height: 100vh; padding: 20px; }
+    html, body {
+      height: auto;
+      min-height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      overscroll-behavior-y: contain;
+    }
+    body { background: linear-gradient(135deg, #000 0%, #0a0e1a 100%); color: #e0e0e0; padding: 20px 20px 60px; }
     .container { max-width: 600px; margin: 0 auto; }
     .header { text-align: center; padding: 24px 0; }
     .logo { font-size: 1.4rem; font-weight: 900; letter-spacing: 0.3em; color: #00ddff; text-shadow: 0 0 20px rgba(0,221,255,0.6); }
@@ -15,7 +23,7 @@
     .sync-badge.ok { color: #00aa55; }
     .sync-badge.err { color: #cc4444; }
 
-    .card { background: rgba(20,24,40,0.8); border: 1px solid #2a3050; border-radius: 16px; padding: 24px; margin-bottom: 16px; backdrop-filter: blur(20px); }
+    .card { background: rgba(20,24,40,0.92); border: 1px solid #2a3050; border-radius: 16px; padding: 24px; margin-bottom: 16px; }
     .player-name { font-size: 1.6rem; font-weight: 800; color: #fff; margin-bottom: 4px; }
     .rank-badge { display: inline-block; background: linear-gradient(135deg, #00aaff, #00ddff); color: #000; font-weight: 900; padding: 6px 14px; border-radius: 6px; font-size: 1.1rem; letter-spacing: 0.2em; }
     .level-info { display: flex; justify-content: space-between; margin: 16px 0 8px; font-size: 0.9rem; color: #8090b0; }
