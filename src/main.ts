@@ -390,8 +390,17 @@ function setupEventListener() {
     if (eventType === undefined && event.textEvent) eventType = event.textEvent.eventType
     if (eventType === undefined && event.sysEvent) eventType = event.sysEvent.eventType
 
+    // ─── App lifecycle ────────────────────────────────────────────────────
+    // When the user opens the phone (Safari / companion pages), iOS suspends
+    // this app in the background. If it was suspended mid-handler, the input
+    // lock would stay stuck and the glasses would ignore all input even after
+    // returning. On foreground re-enter we clear the lock so the app is always
+    // responsive again the moment the user comes back.
+    if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
+      handlingInput = false
+      return
+    }
     if ([
-      OsEventTypeList.FOREGROUND_ENTER_EVENT,
       OsEventTypeList.FOREGROUND_EXIT_EVENT,
       OsEventTypeList.ABNORMAL_EXIT_EVENT,
       OsEventTypeList.SYSTEM_EXIT_EVENT,
@@ -402,6 +411,9 @@ function setupEventListener() {
     // (which would skip past the menu the user actually wanted).
     if (handlingInput) return
     handlingInput = true
+    // Watchdog: never let a hung BLE render (e.g. interrupted by a suspend)
+    // hold the lock forever — auto-release after a generous timeout.
+    const watchdog = setTimeout(() => { handlingInput = false }, 8000)
     try {
       switch (eventType) {
         case OsEventTypeList.CLICK_EVENT:
@@ -417,6 +429,7 @@ function setupEventListener() {
           await handleSwipeDown(); break
       }
     } finally {
+      clearTimeout(watchdog)
       handlingInput = false
     }
   })
