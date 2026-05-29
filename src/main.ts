@@ -92,7 +92,9 @@ let nameBuffer = ''
 let charIdx = 0
 let inputStep: InputStep = 'name'
 let selectedLang: Lang = 'en'
-let selectedPrivacy = 'anonymous'
+// Default privacy: 'public' so new players share their real name in the
+// global ranking unless they explicitly switch to anonymous/private.
+let selectedPrivacy = 'public'
 let isChangingName = false
 
 function currentChar(): string {
@@ -265,7 +267,7 @@ async function startChangeName() {
   isChangingName = true
   nameBuffer = ''; charIdx = 0; inputStep = 'name'
   selectedLang = (player?.language as Lang) ?? 'en'
-  selectedPrivacy = player?.privacy ?? 'anonymous'
+  selectedPrivacy = player?.privacy ?? 'public'
   currentScreen = 'nameInput'
   await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
 }
