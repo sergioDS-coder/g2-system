@@ -75,6 +75,7 @@ let warningIdx = 0
 let selectedRankingEntry: RankingEntry | null = null
 let handlingInput = false
 let pendingPress = false   // click queued while a scroll was being processed
+let isPaused = false       // true while the glasses are in background (phone in use)
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -127,6 +128,16 @@ async function main() {
 
   await initialize()
   setupEventListener()
+
+  // ─── Fallback: visibilitychange funziona anche quando FOREGROUND_EXIT_EVENT
+  // non viene recapitato al JS (il WebView viene sospeso prima) ────────────────
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) showPause().catch(() => {})
+    else restoreFromPause().catch(() => {})
+  })
+  // pagehide è un secondo fallback per browser/WebView che usano BFCache
+  window.addEventListener('pagehide', () => { showPause().catch(() => {}) })
+  window.addEventListener('pageshow', () => { restoreFromPause().catch(() => {}) })
 }
 
 async function initialize() {
@@ -312,6 +323,22 @@ async function refreshCurrentScreen() {
   }
 }
 
+// ─── Pausa / Ripristino ───────────────────────────────────────────────────────
+
+async function showPause() {
+  if (isPaused) return          // già in pausa, evita doppioni
+  isPaused = true
+  handlingInput = false; pendingPress = false
+  try { await display.update(display.buildPauseScreen()) } catch {}
+}
+
+async function restoreFromPause() {
+  if (!isPaused) return         // non era in pausa, nulla da fare
+  isPaused = false
+  handlingInput = false; pendingPress = false
+  await refreshCurrentScreen()
+}
+
 async function goToArtifacts() {
   currentScreen = 'artifacts'
   await display.update(display.buildArtifactList(player!))
@@ -430,16 +457,10 @@ function setupEventListener() {
 
     // ─── Lifecycle ────────────────────────────────────────────────────────
     if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
-      // User returned to the glasses: clear locks and restore screen
-      handlingInput = false; pendingPress = false
-      await refreshCurrentScreen()
-      return
+      await restoreFromPause(); return
     }
     if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
-      // User switched to the phone: show pause overlay
-      handlingInput = false; pendingPress = false
-      try { await display.update(display.buildPauseScreen()) } catch {}
-      return
+      await showPause(); return
     }
     // Filter out exit/IMU events; pass through click/scroll/double/undefined
     if (eventType !== OsEventTypeList.CLICK_EVENT
