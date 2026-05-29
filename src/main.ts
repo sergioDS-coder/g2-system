@@ -386,48 +386,42 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    let eventType = event.eventType
-    if (eventType === undefined && event.textEvent) eventType = event.textEvent.eventType
-    if (eventType === undefined && event.sysEvent) eventType = event.sysEvent.eventType
+    // Normalize the raw eventType to the SDK enum regardless of whether it
+    // arrives as a number (0-8), a full string ("CLICK_EVENT"), or a short
+    // string ("CLICK"). fromJson handles all three variants.
+    const raw = event.eventType
+      ?? event.textEvent?.eventType
+      ?? event.sysEvent?.eventType
+    const eventType = OsEventTypeList.fromJson(raw)
 
-    // ─── App lifecycle ────────────────────────────────────────────────────
-    // When the user opens the phone (Safari / companion pages), iOS suspends
-    // this app in the background. If it was suspended mid-handler, the input
-    // lock would stay stuck and the glasses would ignore all input even after
-    // returning. On foreground re-enter we clear the lock so the app is always
-    // responsive again the moment the user comes back.
+    // ─── Lifecycle ────────────────────────────────────────────────────────
+    // On foreground re-enter, clear the input lock so the glasses are
+    // immediately responsive after the user returns from the phone.
     if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
       handlingInput = false
       return
     }
-    if ([
-      OsEventTypeList.FOREGROUND_EXIT_EVENT,
-      OsEventTypeList.ABNORMAL_EXIT_EVENT,
-      OsEventTypeList.SYSTEM_EXIT_EVENT,
-    ].includes(eventType)) return
+    // Ignore all other non-input events (exit, IMU sensor data, etc.)
+    if (eventType !== OsEventTypeList.CLICK_EVENT
+     && eventType !== OsEventTypeList.DOUBLE_CLICK_EVENT
+     && eventType !== OsEventTypeList.SCROLL_TOP_EVENT
+     && eventType !== OsEventTypeList.SCROLL_BOTTOM_EVENT
+     && eventType !== undefined) return
 
-    // Serialize input: while one event is being handled, drop any others.
-    // This prevents rapid ring presses from queuing up and firing in a burst
-    // (which would skip past the menu the user actually wanted).
+    // ─── Input serialization ──────────────────────────────────────────────
     if (handlingInput) return
     handlingInput = true
-    // Watchdog: never let a hung BLE render (e.g. interrupted by a suspend)
-    // hold the lock forever — auto-release after a generous timeout.
     const watchdog = setTimeout(() => { handlingInput = false }, 8000)
     try {
-      // Scroll and double-click are handled explicitly; every other input
-      // event is treated as a single press. The press event can arrive with
-      // several different eventType values across firmware/SDK versions
-      // (CLICK_EVENT, 0, undefined, null, …), so a catch-all default is the
-      // only reliable way to never miss a click.
       switch (eventType) {
-        case OsEventTypeList.DOUBLE_CLICK_EVENT:
-          await handleDoublePress(); break
         case OsEventTypeList.SCROLL_TOP_EVENT:
           await handleSwipeUp(); break
         case OsEventTypeList.SCROLL_BOTTOM_EVENT:
           await handleSwipeDown(); break
+        case OsEventTypeList.DOUBLE_CLICK_EVENT:
+          await handleDoublePress(); break
         default:
+          // CLICK_EVENT (0) or undefined (unnormalized event) → press
           await handlePress(); break
       }
     } finally {
