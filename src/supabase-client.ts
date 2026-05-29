@@ -17,6 +17,8 @@ interface SupabasePlayerRow {
   quests_completed: number
   privacy: string
   language: string
+  player_class?: string | null
+  artifacts_json?: string
 }
 
 export interface RankingEntry {
@@ -60,7 +62,7 @@ export class SupabaseClient {
     if (!this.isConfigured()) return false
     if (player.privacy === 'private') return true  // non sincronizza
 
-    const row: SupabasePlayerRow = {
+    const baseRow: SupabasePlayerRow = {
       player_id: player.playerId,
       name: player.privacy === 'anonymous' ? `Player_${player.playerId.slice(0, 6)}` : player.name,
       level: player.level,
@@ -76,17 +78,29 @@ export class SupabaseClient {
       privacy: player.privacy,
       language: player.language,
     }
+    const extendedRow: SupabasePlayerRow = {
+      ...baseRow,
+      player_class: player.playerClass ?? null,
+      artifacts_json: JSON.stringify(player.artifacts ?? []),
+    }
+
+    const opts = {
+      method: 'POST' as const,
+      headers: { ...this.headers(), 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+    }
 
     try {
-      const response = await fetch(`${this.url}/rest/v1/players?on_conflict=player_id`, {
-        method: 'POST',
-        headers: {
-          ...this.headers(),
-          'Prefer': 'resolution=merge-duplicates,return=minimal',
-        },
-        body: JSON.stringify(row),
+      // Try with extended fields (class + artifacts); fall back if columns don't exist yet
+      const r1 = await fetch(`${this.url}/rest/v1/players?on_conflict=player_id`, {
+        ...opts, body: JSON.stringify(extendedRow),
       })
-      return response.ok
+      if (r1.ok) return true
+
+      // Extended columns may not exist — retry with base fields only
+      const r2 = await fetch(`${this.url}/rest/v1/players?on_conflict=player_id`, {
+        ...opts, body: JSON.stringify(baseRow),
+      })
+      return r2.ok
     } catch (err) {
       console.error('Errore upsert player:', err)
       return false
