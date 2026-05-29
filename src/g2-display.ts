@@ -121,7 +121,7 @@ export class G2Display {
 
     lines.push(SHORT_LINE)
     lines.push(`${c(quests.length)} ★ Profile`)
-    lines.push(`${c(quests.length + 1)} ✕ Exit`)
+    lines.push(`${c(quests.length + 1)} X Exit`)
     lines.push('▲/▼  [P]=Seleziona')
     return lines.join('\n')
   }
@@ -427,7 +427,7 @@ export class G2Display {
     lines.push(`${profileCursor}★ PROFILE`)
 
     const exitCursor = selectedIdx === quests.length + 1 ? '▶' : ' '
-    lines.push(`${exitCursor}✕ EXIT`)
+    lines.push(`${exitCursor}X EXIT`)
 
     lines.push(LINE)
     lines.push('▲/▼=Nav  [PRESS]=Select')
@@ -444,7 +444,7 @@ export class G2Display {
     return [
       truncate(`${jollyTag}${name.toUpperCase()}`, 18),
       SHORT_LINE,
-      `▸ ${q.amount} ${q.unit}`,
+      `▶ ${q.amount} ${q.unit}`,
       q.completed ? '● COMPLETATA' : '○ IN ATTESA',
       SHORT_LINE,
       q.completed
