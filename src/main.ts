@@ -45,7 +45,7 @@ function normalizePlayer(p: PlayerProfile): PlayerProfile {
 // ─── Stato globale ────────────────────────────────────────────────────────────
 
 type Screen =
-  | 'boot' | 'setup' | 'nameInput' | 'dailyMessage' | 'allDone'
+  | 'boot' | 'setup' | 'nameInput' | 'privacy' | 'dailyMessage' | 'allDone'
   | 'warning' | 'questList' | 'questDetail'
   | 'levelUp' | 'rankUp' | 'profile' | 'artifacts'
   | 'ranking' | 'rankingDetail' | 'error'
@@ -86,31 +86,30 @@ let pendingArtifact: ArtifactId | null = null
 const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-'
 const LANGS: Lang[] = ['en', 'de', 'fr', 'es', 'it', 'zh', 'ja', 'ko']
 const PRIVACY_OPTIONS = ['public', 'anonymous', 'private']
-type InputStep = 'name' | 'lang' | 'privacy'
+type InputStep = 'name' | 'lang'
 
 let nameBuffer = ''
 let charIdx = 0
 let inputStep: InputStep = 'name'
 let selectedLang: Lang = 'en'
-// Default privacy: 'public' so new players share their real name in the
-// global ranking unless they explicitly switch to anonymous/private.
+// Privacy is chosen on a dedicated mandatory screen after the name step.
+// Default 'public' is just the initial cursor position; the player must
+// confirm it (or pick another option) explicitly before setup completes.
 let selectedPrivacy = 'public'
+let privacyIdx = 0
 let isChangingName = false
 
 function currentChar(): string {
   if (inputStep === 'lang') return LANGS[charIdx % LANGS.length]
-  if (inputStep === 'privacy') return PRIVACY_OPTIONS[charIdx % PRIVACY_OPTIONS.length]
   if (charIdx < CHARSET.length) return CHARSET[charIdx]
   if (charIdx === CHARSET.length) return 'LANG'
-  if (charIdx === CHARSET.length + 1) return 'PRIV'
-  if (charIdx === CHARSET.length + 2) return 'OK'
+  if (charIdx === CHARSET.length + 1) return 'OK'
   return 'ESC'
 }
 
 function charsetLen(): number {
   if (inputStep === 'lang') return LANGS.length
-  if (inputStep === 'privacy') return PRIVACY_OPTIONS.length
-  return CHARSET.length + 4
+  return CHARSET.length + 3
 }
 
 // ─── Avvio ────────────────────────────────────────────────────────────────────
@@ -143,7 +142,7 @@ async function initialize() {
     } else {
       nameBuffer = ''; charIdx = 0; inputStep = 'name'; isChangingName = false
       currentScreen = 'nameInput'
-      await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
+      await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, inputStep))
       return
     }
   } else {
@@ -269,7 +268,7 @@ async function startChangeName() {
   selectedLang = (player?.language as Lang) ?? 'en'
   selectedPrivacy = player?.privacy ?? 'public'
   currentScreen = 'nameInput'
-  await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
+  await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, inputStep))
 }
 
 // ─── Navigazione ─────────────────────────────────────────────────────────────
@@ -430,6 +429,7 @@ async function handlePress() {
     boot: async () => {},
     setup: async () => { await initialize() },
     nameInput: handleNameInputPress,
+    privacy: handlePrivacyPress,
     dailyMessage: async () => { if (msgIdx === 1) await bridge.shutDownPageContainer(0); else await goToQuestList() },
     warning: async () => { if (warningIdx === 1) await bridge.shutDownPageContainer(0); else await goToQuestList() },
     allDone: async () => { if (allDoneIdx === 1) await goToQuestList(); else await goToProfile() },
@@ -463,22 +463,31 @@ async function handlePress() {
 async function handleNameInputPress() {
   if (inputStep === 'lang') {
     selectedLang = currentChar() as Lang; inputStep = 'name'; charIdx = 0
-  } else if (inputStep === 'privacy') {
-    selectedPrivacy = currentChar(); inputStep = 'name'; charIdx = 0
   } else if (currentChar() === 'LANG') {
     inputStep = 'lang'; charIdx = LANGS.indexOf(selectedLang)
-  } else if (currentChar() === 'PRIV') {
-    inputStep = 'privacy'; charIdx = PRIVACY_OPTIONS.indexOf(selectedPrivacy)
   } else if (currentChar() === 'OK' && nameBuffer.trim().length > 0) {
-    await confirmSetup(); return
+    await goToPrivacy(); return
   } else if (currentChar() === 'ESC') {
     if (isChangingName) { isChangingName = false; await goToProfile() }
     else { currentScreen = 'setup'; await display.update(display.buildSetupScreen()) }
     return
-  } else if (nameBuffer.length < 15 && !['OK','ESC','LANG','PRIV'].includes(currentChar())) {
+  } else if (nameBuffer.length < 15 && !['OK','ESC','LANG'].includes(currentChar())) {
     nameBuffer += currentChar()
   }
-  await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
+  await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, inputStep))
+}
+
+// ─── Privacy (passaggio esplicito e obbligatorio) ─────────────────────────────
+
+async function goToPrivacy() {
+  currentScreen = 'privacy'
+  privacyIdx = Math.max(0, PRIVACY_OPTIONS.indexOf(selectedPrivacy))
+  await display.update(display.buildPrivacyScreen(privacyIdx))
+}
+
+async function handlePrivacyPress() {
+  selectedPrivacy = PRIVACY_OPTIONS[privacyIdx]
+  await confirmSetup()
 }
 
 async function handleQuestListPress() {
@@ -570,7 +579,11 @@ async function handleSwipeUp() {
   switch (currentScreen) {
     case 'nameInput':
       charIdx = (charIdx - 1 + charsetLen()) % charsetLen()
-      await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
+      await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, inputStep))
+      break
+    case 'privacy':
+      privacyIdx = (privacyIdx - 1 + PRIVACY_OPTIONS.length) % PRIVACY_OPTIONS.length
+      await display.update(display.buildPrivacyScreen(privacyIdx))
       break
     case 'dailyMessage':
       msgIdx = Math.max(0, msgIdx - 1); await display.showDailyMessage(player!.rank, player!.level, msgIdx); break
@@ -609,7 +622,11 @@ async function handleSwipeDown() {
   switch (currentScreen) {
     case 'nameInput':
       charIdx = (charIdx + 1) % charsetLen()
-      await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, selectedPrivacy, inputStep))
+      await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, inputStep))
+      break
+    case 'privacy':
+      privacyIdx = (privacyIdx + 1) % PRIVACY_OPTIONS.length
+      await display.update(display.buildPrivacyScreen(privacyIdx))
       break
     case 'dailyMessage':
       msgIdx = Math.min(1, msgIdx + 1); await display.showDailyMessage(player!.rank, player!.level, msgIdx); break

@@ -25,7 +25,7 @@ const TEXT_X = IMG_W        // text container starts after image
 const TEXT_W = W - IMG_W    // 396px → ~19 chars per line
 const SHORT_LINE = '───────────────────'  // fits in narrow text container
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v2.0.1'
+export const VERSION = 'v2.0.2'
 
 
 function truncate(text: string, maxLen: number): string {
@@ -309,7 +309,7 @@ export class G2Display {
     ].join('\n')
   }
 
-  buildNameInput(nameBuffer: string, currentChar: string, lang: string, privacy: string, inputStep: string): string {
+  buildNameInput(nameBuffer: string, currentChar: string, lang: string, inputStep: string): string {
     const tr = t(this.lang)
     if (inputStep === 'lang') {
       return [
@@ -323,21 +323,6 @@ export class G2Display {
         ' 2x=Cancel',
       ].join('\n')
     }
-    if (inputStep === 'privacy') {
-      return [
-        '╭──────────────────────────╮',
-        '│    o──|─[ G2 SYSTEM ]─|──▶  │',
-        `│    ${pad(tr.selectPrivacy, 18)}    │`,
-        '╰──────────────────────────╯',
-        ` ▶ ${currentChar.charAt(0).toUpperCase() + currentChar.slice(1)}`,
-        LINE,
-        ` ${tr.privacyPublic}`,
-        ` ${tr.privacyAnon}`,
-        ` ${tr.privacyPrivate}`,
-        LINE,
-        ' ▲/▼=Change  PRESS=Confirm',
-      ].join('\n')
-    }
     const disp = nameBuffer + '[' + currentChar + ']'
     return [
       '╭──────────────────────────╮',
@@ -345,10 +330,28 @@ export class G2Display {
       `│    ${pad(tr.enterName, 18)}    │`,
       '╰──────────────────────────╯',
       ' ' + disp,
-      ` Lang:${lang.toUpperCase()}  Priv:${privacy.slice(0, 3).toUpperCase()}`,
+      ` Lang:${lang.toUpperCase()}`,
       LINE,
       ' ▲/▼=Letter  PRESS=Add',
-      ' [LANG] [PRIV] [OK] [ESC]',
+      ' [LANG] [OK] [ESC]',
+    ].join('\n')
+  }
+
+  /** Mandatory privacy step shown after the name is entered.
+   *  The player must actively pick one of the three options and confirm. */
+  buildPrivacyScreen(selectedIdx = 0): string {
+    const tr = t(this.lang)
+    const c = (i: number) => i === selectedIdx ? '▶' : ' '
+    return [
+      '╭──────────────────────────╮',
+      '│    o──|─[ G2 SYSTEM ]─|──▶  │',
+      `│    ${pad(tr.selectPrivacy, 18)}    │`,
+      '╰──────────────────────────╯',
+      `${c(0)} ${tr.privacyPublic}`,
+      `${c(1)} ${tr.privacyAnon}`,
+      `${c(2)} ${tr.privacyPrivate}`,
+      LINE,
+      ' ▲/▼=Change  PRESS=Confirm',
     ].join('\n')
   }
 
