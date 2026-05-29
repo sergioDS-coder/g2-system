@@ -74,6 +74,7 @@ let warningIdx = 0
 
 let selectedRankingEntry: RankingEntry | null = null
 let handlingInput = false
+let pendingPress = false   // click queued while a scroll was being processed
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -386,63 +387,77 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    // ─── TEMP DIAGNOSTIC ──────────────────────────────────────────────────
-    // Logs the exact shape of every incoming event so we can see precisely
-    // what a click sends vs a scroll. Remove once click routing is confirmed.
+    // ─── Diagnostic (keep until click confirmed working) ──────────────────
     try {
       console.log('[G2-EVENT]', JSON.stringify({
-        top: event?.eventType,
         text: event?.textEvent?.eventType,
         sys: event?.sysEvent?.eventType,
         list: event?.listEvent?.eventType,
+        top: event?.eventType,
         keys: Object.keys(event ?? {}),
-        raw: event,
       }))
-    } catch { console.log('[G2-EVENT] (unserializable)', event) }
+    } catch { console.log('[G2-EVENT] (unserializable)') }
 
-    // Normalize the raw eventType to the SDK enum regardless of whether it
-    // arrives as a number (0-8), a full string ("CLICK_EVENT"), or a short
-    // string ("CLICK"). fromJson handles all three variants.
-    const raw = event.eventType
-      ?? event.textEvent?.eventType
-      ?? event.sysEvent?.eventType
-      ?? event.listEvent?.eventType
+    const raw = event?.eventType
+      ?? event?.textEvent?.eventType
+      ?? event?.sysEvent?.eventType
+      ?? event?.listEvent?.eventType
     const eventType = OsEventTypeList.fromJson(raw)
-    console.log('[G2-EVENT] raw=', raw, '→ normalized=', eventType)
+    console.log('[G2-EVENT] raw=', raw, '→ type=', eventType, 'busy=', handlingInput)
 
     // ─── Lifecycle ────────────────────────────────────────────────────────
-    // On foreground re-enter, clear the input lock so the glasses are
-    // immediately responsive after the user returns from the phone.
     if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
-      handlingInput = false
-      return
+      handlingInput = false; pendingPress = false; return
     }
-    // Ignore all other non-input events (exit, IMU sensor data, etc.)
+    // Filter out exit/IMU events; pass through click/scroll/double/undefined
     if (eventType !== OsEventTypeList.CLICK_EVENT
      && eventType !== OsEventTypeList.DOUBLE_CLICK_EVENT
      && eventType !== OsEventTypeList.SCROLL_TOP_EVENT
      && eventType !== OsEventTypeList.SCROLL_BOTTOM_EVENT
      && eventType !== undefined) return
 
+    const isClick = eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined
+    const isScroll = eventType === OsEventTypeList.SCROLL_TOP_EVENT || eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT
+
     // ─── Input serialization ──────────────────────────────────────────────
-    if (handlingInput) return
+    // If busy handling a previous event, queue the click so it fires as soon
+    // as the scroll BLE update completes — this is the typical "rotate to item,
+    // immediately press to confirm" gesture.
+    if (handlingInput) {
+      if (isClick) { pendingPress = true; console.log('[G2-INPUT] click queued') }
+      else if (isScroll) console.log('[G2-INPUT] scroll dropped (busy)')
+      return
+    }
+
     handlingInput = true
-    const watchdog = setTimeout(() => { handlingInput = false }, 8000)
+    const watchdog = setTimeout(() => { handlingInput = false; pendingPress = false }, 8000)
     try {
-      switch (eventType) {
-        case OsEventTypeList.SCROLL_TOP_EVENT:
-          await handleSwipeUp(); break
-        case OsEventTypeList.SCROLL_BOTTOM_EVENT:
-          await handleSwipeDown(); break
-        case OsEventTypeList.DOUBLE_CLICK_EVENT:
-          await handleDoublePress(); break
-        default:
-          // CLICK_EVENT (0) or undefined (unnormalized event) → press
-          await handlePress(); break
+      if (eventType === OsEventTypeList.SCROLL_TOP_EVENT) {
+        await handleSwipeUp()
+      } else if (eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT) {
+        await handleSwipeDown()
+      } else if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
+        await handleDoublePress()
+      } else {
+        // CLICK_EVENT (0) or undefined
+        pendingPress = false
+        console.log('[G2-INPUT] handlePress on screen:', currentScreen)
+        await handlePress()
       }
     } finally {
       clearTimeout(watchdog)
       handlingInput = false
+
+      // ─── Flush queued click (fired while scroll was processing) ──────────
+      if (pendingPress) {
+        pendingPress = false
+        console.log('[G2-INPUT] flushing queued click, screen:', currentScreen)
+        handlingInput = true
+        const watchdog2 = setTimeout(() => { handlingInput = false }, 8000)
+        try { await handlePress() }
+        catch (e) { console.error('[G2-INPUT] queued click failed:', e) }
+        finally { clearTimeout(watchdog2); handlingInput = false }
+      }
     }
   })
 }
@@ -450,6 +465,7 @@ function setupEventListener() {
 // ─── Handlers Click ───────────────────────────────────────────────────────────
 
 async function handlePress() {
+  console.log('[G2-PRESS] screen=', currentScreen, 'questIdx=', questIdx)
   const handlers: Record<Screen, () => Promise<void>> = {
     boot: async () => {},
     setup: async () => { await initialize() },
@@ -477,11 +493,12 @@ async function handlePress() {
   if (handler) {
     try {
       await handler()
+      console.log('[G2-PRESS] handler done, now on screen:', currentScreen)
     } catch (e) {
-      console.error('[Main] Handler failed:', e)
+      console.error('[G2-PRESS] handler threw:', e)
     }
   } else {
-    console.warn('[Main] No handler for screen:', currentScreen)
+    console.warn('[G2-PRESS] no handler for screen:', currentScreen)
   }
 }
 
