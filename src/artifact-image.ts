@@ -3,6 +3,8 @@
 // Falls back to a simple glyph if file not found.
 // Output: two 180×144 PNG-encoded halves (top + bottom), matching SDK format.
 
+import { BLACK_THRESHOLD } from './quest-image'
+
 export const ART_IMG_W = 180
 export const ART_IMG_H = 288
 
@@ -27,7 +29,7 @@ function canvasHalfToPng(canvas: HTMLCanvasElement, sy: number): number[] {
   const d = img.data
   for (let i = 0; i < d.length; i += 4) {
     const lum = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
-    const g = Math.round(lum / 17) * 17
+    const g = lum < BLACK_THRESHOLD ? 0 : Math.round(lum / 17) * 17
     d[i] = d[i + 1] = d[i + 2] = g
     d[i + 3] = 255
   }

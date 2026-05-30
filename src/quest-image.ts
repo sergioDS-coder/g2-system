@@ -6,6 +6,11 @@
 export const IMG_W = 180
 export const IMG_H = 144
 
+// Luminance below this is crushed to pure black (g=0). Dark backgrounds
+// behind a subject would otherwise quantize to g=17, which the G2 glasses
+// render as a faint green glow. Shared with artifact-image.ts — keep in sync.
+export const BLACK_THRESHOLD = 90
+
 export interface QuestCardInfo {
   type: string    // FITNESS / MENTAL / JOLLY
   attr: string    // STR / AGI / VIT / INT / END
@@ -299,9 +304,7 @@ function canvasToImageBytes(src: HTMLCanvasElement, sx: number, sy: number, w: n
   const d = img.data
   for (let i = 0; i < d.length; i += 4) {
     const lum = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
-    // Pixels below 30 lum are crushed to 0: dark backgrounds render as off
-    // rather than the faint green the glasses show for lum level 17.
-    const g = lum < 30 ? 0 : Math.round(lum / 17) * 17
+    const g = lum < BLACK_THRESHOLD ? 0 : Math.round(lum / 17) * 17
     d[i] = d[i + 1] = d[i + 2] = g
     d[i + 3] = 255
   }
