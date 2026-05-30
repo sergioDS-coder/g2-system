@@ -299,7 +299,9 @@ function canvasToImageBytes(src: HTMLCanvasElement, sx: number, sy: number, w: n
   const d = img.data
   for (let i = 0; i < d.length; i += 4) {
     const lum = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
-    const g = Math.round(lum / 17) * 17
+    // Pixels below 30 lum are crushed to 0: dark backgrounds render as off
+    // rather than the faint green the glasses show for lum level 17.
+    const g = lum < 30 ? 0 : Math.round(lum / 17) * 17
     d[i] = d[i + 1] = d[i + 2] = g
     d[i + 3] = 255
   }
