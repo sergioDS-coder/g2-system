@@ -283,22 +283,7 @@ export class G2Display {
     ].join('\n')
   }
 
-  buildExitConfirmScreen(selectedIdx: number): string {
-    const c = (i: number) => i === selectedIdx ? '▶' : ' '
-    return [
-      LINE,
-      '  ESCI DA G2 SYSTEM?',
-      LINE,
-      '',
-      `${c(0)} NO  — Rimani`,
-      `${c(1)} SI  — Esci dall\'app`,
-      '',
-      LINE,
-      '  ▲/▼  [P]=Conferma',
-    ].join('\n')
-  }
-
-  buildPauseScreen(): string {
+buildPauseScreen(): string {
     return [
       LINE,
       '  G2 SYSTEM — IN PAUSA',
