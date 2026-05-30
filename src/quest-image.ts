@@ -14,10 +14,22 @@ export interface QuestCardInfo {
   unit: string
 }
 
+// ─── Cache pixel arrays per evitare ri-elaborazioni costose ──────────────────
+// Le conversioni PNG→canvas→grayscale→PNG sono lente. Una volta elaborate,
+// i byte vengono tenuti in memoria per tutta la sessione.
+const _pixelCache = new Map<string, [number[], number[]]>()
+
+function _cacheKey(id: string, info?: QuestCardInfo): string {
+  return info ? `${id}|${info.type}|${info.attr}|${info.exp}|${info.amount}|${info.unit}` : id
+}
+
 export async function renderQuestImages(
   templateId: string,
   info?: QuestCardInfo,
 ): Promise<[number[], number[]]> {
+  const key = _cacheKey(templateId, info)
+  if (_pixelCache.has(key)) return _pixelCache.get(key)!
+
   const canvas = document.createElement('canvas')
   canvas.width = IMG_W
   canvas.height = IMG_H * 2
@@ -36,33 +48,44 @@ export async function renderQuestImages(
 
   if (info) drawCardOverlay(ctx, info)
 
-  return [
+  const result: [number[], number[]] = [
     canvasToImageBytes(canvas, 0, 0, IMG_W, IMG_H),
     canvasToImageBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
   ]
+  _pixelCache.set(key, result)
+  return result
 }
 
-/** Loads /wild-quest.png and splits it. Falls back to a Canvas-drawn card. */
+/** Loads /wild-quest.png and splits it. Falls back to a Canvas-drawn card.
+ *  Result is cached: the first call does the heavy work, subsequent calls
+ *  return the pre-computed pixel arrays immediately. */
 export async function renderWildQuestImage(): Promise<[number[], number[]]> {
+  const CACHE_KEY = 'wild_quest'
+  if (_pixelCache.has(CACHE_KEY)) return _pixelCache.get(CACHE_KEY)!
+
+  let result: [number[], number[]]
   const c = await loadImageFile('/wild-quest.png')
   if (c) {
-    return [
+    result = [
       canvasToImageBytes(c, 0, 0, IMG_W, IMG_H),
       canvasToImageBytes(c, 0, IMG_H, IMG_W, IMG_H),
     ]
+  } else {
+    const canvas = document.createElement('canvas')
+    canvas.width = IMG_W
+    canvas.height = IMG_H * 2
+    const ctx = canvas.getContext('2d')!
+    ctx.fillStyle = '#000'
+    ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
+    ctx.fillStyle = '#fff'
+    drawWildQuestCard(ctx, IMG_W, IMG_H * 2)
+    result = [
+      canvasToImageBytes(canvas, 0, 0, IMG_W, IMG_H),
+      canvasToImageBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
+    ]
   }
-  const canvas = document.createElement('canvas')
-  canvas.width = IMG_W
-  canvas.height = IMG_H * 2
-  const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#000'
-  ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
-  ctx.fillStyle = '#fff'
-  drawWildQuestCard(ctx, IMG_W, IMG_H * 2)
-  return [
-    canvasToImageBytes(canvas, 0, 0, IMG_W, IMG_H),
-    canvasToImageBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
-  ]
+  _pixelCache.set(CACHE_KEY, result)
+  return result
 }
 
 function drawWildQuestCard(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -123,16 +146,24 @@ function drawWildQuestCard(ctx: CanvasRenderingContext2D, w: number, h: number) 
 }
 
 /** Loads /welcome-images/<rank>.png and splits it into the two containers.
- *  Falls back to a Canvas-drawn rank card if the PNG file is not found. */
+ *  Falls back to a Canvas-drawn rank card if the PNG file is not found.
+ *  Result is cached per rank. */
 export async function renderWelcomeImage(rank: string): Promise<[number[], number[]]> {
+  const key = `welcome_${rank}`
+  if (_pixelCache.has(key)) return _pixelCache.get(key)!
+
+  let result: [number[], number[]]
   const c = await loadImageFile(`/welcome-images/${rank}.png`)
   if (c) {
-    return [
+    result = [
       canvasToImageBytes(c, 0, 0, IMG_W, IMG_H),
       canvasToImageBytes(c, 0, IMG_H, IMG_W, IMG_H),
     ]
+  } else {
+    result = renderRankCard(rank)
   }
-  return renderRankCard(rank)
+  _pixelCache.set(key, result)
+  return result
 }
 
 /** Draws a top "type" header and a bottom stats band over the icon. */
