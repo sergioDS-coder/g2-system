@@ -84,6 +84,14 @@ let pauseTimer: ReturnType<typeof setTimeout> | null = null  // debounce for bro
 let lastClickTime = 0
 const DBL_CLICK_MS = 500
 
+// ─── MONITOR EVENTI (diagnostica temporanea) ─────────────────────────────────
+// Quando true l'app NON naviga: ogni evento viene accumulato e mostrato a
+// schermo. Serve a vedere cosa manda davvero il ring sul doppio tocco.
+// Mettere a false (o rimuovere) appena risolto.
+const DEBUG_MONITOR = true
+const dbgLog: string[] = []
+let dbgLastTime = 0
+
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
 let warningExpLost = 0
@@ -469,22 +477,23 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    // ─── DIAGNOSTICA TEMPORANEA ───────────────────────────────────────────
-    // Mostra gli ultimi eventi sullo schermo per capire cosa manda il ring.
-    // DA RIMUOVERE appena il doppio-click funziona correttamente.
-    const rawDbg = JSON.stringify({
-      top:  event?.eventType,
-      txt:  event?.textEvent?.eventType,
-      sys:  event?.sysEvent?.eventType,
-      lst:  event?.listEvent?.eventType,
-      keys: Object.keys(event ?? {}),
-    })
-    try {
-      await display.update(
-        `[DBG EVENT]\n${rawDbg.slice(0, 100)}\nscreen:${currentScreen}`
-      )
-    } catch {}
-    // ─────────────────────────────────────────────────────────────────────
+    // ─── MONITOR EVENTI (diagnostica temporanea) ──────────────────────────
+    if (DEBUG_MONITOR) {
+      const now = Date.now()
+      const delta = dbgLastTime ? now - dbgLastTime : 0
+      dbgLastTime = now
+      const t = event?.eventType ?? event?.textEvent?.eventType
+             ?? event?.sysEvent?.eventType ?? event?.listEvent?.eventType
+      const src = event?.textEvent ? 'txt' : event?.sysEvent ? 'sys'
+               : event?.listEvent ? 'lst' : event?.eventType !== undefined ? 'top' : '?'
+      dbgLog.unshift(`type=${t} (${src}) +${delta}ms`)
+      if (dbgLog.length > 7) dbgLog.pop()
+      try {
+        await display.update(['== EVENT MONITOR ==', '', ...dbgLog].join('\n'))
+      } catch {}
+      return   // nessuna navigazione finché il monitor è attivo
+    }
+    // ──────────────────────────────────────────────────────────────────────
 
     const raw = event?.eventType
       ?? event?.textEvent?.eventType
