@@ -137,26 +137,31 @@ function fmtEv(v: any): string {
 // Monitor diagnostico: mostra a schermo gli ultimi eventi ricevuti.
 async function setupMonitor() {
   const log: string[] = []
-  const render = () => {
+
+  const render = async () => {
     const lines = [
       '== MONITOR EVENTI ==',
-      'click / 2click / su / giu',
+      'premi/scorri e leggi',
       '─────────────',
       ...(log.length ? log : ['(in attesa...)']),
     ]
-    display.update(lines.join('\n')).catch(() => {})
+    await display.updateTextOnly(lines.join('\n'))
   }
-  render()
+
+  // Attende che l'SDK sia pronto ad accettare aggiornamenti del testo
+  await new Promise(r => setTimeout(r, 500))
+  await render()
 
   bridge.onEvenHubEvent((event: any) => {
     const top = event?.eventType
     const tT  = event?.textEvent?.eventType
     const sT  = event?.sysEvent?.eventType
     const lT  = event?.listEvent?.eventType
-    const src = event?.sysEvent?.eventSource ?? event?.textEvent?.eventSource
-    log.unshift(`e:${fmtEv(top)} t:${fmtEv(tT)} s:${fmtEv(sT)} l:${fmtEv(lT)} src:${fmtEv(src)}`)
-    if (log.length > 7) log.pop()
-    render()
+    const keys = event ? Object.keys(event).slice(0, 3).join(',') : '?'
+    log.unshift(`k:${keys}`)
+    log.unshift(`e:${fmtEv(top)} t:${fmtEv(tT)} s:${fmtEv(sT)} l:${fmtEv(lT)}`)
+    while (log.length > 8) log.pop()
+    render().catch(() => {})
   })
 }
 
@@ -176,7 +181,7 @@ async function main() {
   // a video ogni evento che arriva dall'anello/stanghette. Serve a capire su
   // QUALE canale e con quale valore arriva il doppio click su questo hardware.
   if (DEBUG_MONITOR) {
-    setupMonitor()
+    await setupMonitor()
     return
   }
 
