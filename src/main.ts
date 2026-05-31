@@ -50,7 +50,7 @@ type Screen =
   | 'warning' | 'questList' | 'questDetail'
   | 'levelUp' | 'rankUp' | 'profile' | 'artifacts'
   | 'ranking' | 'rankingDetail' | 'error'
-  | 'artifactReward' | 'exitConfirm'
+  | 'artifactReward'
 
 let currentScreen: Screen = 'boot'
 let display: G2Display
@@ -78,9 +78,6 @@ let handlingInput = false
 let pendingPress = false   // click queued while a scroll was being processed
 let isPaused = false       // true while the glasses are in background (phone in use)
 let pauseTimer: ReturnType<typeof setTimeout> | null = null  // debounce for browser visibility events
-
-let exitConfirmIdx = 0           // 0 = NO (default sicuro), 1 = SÌ
-let preExitScreen: Screen = 'questList'
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -346,7 +343,6 @@ async function refreshCurrentScreen() {
       case 'rankingDetail': if (selectedRankingEntry) await display.update(display.buildRankingDetail(selectedRankingEntry, rankingPage * 4 + rankingIdx + 1)); break
       case 'artifacts':   await display.update(display.buildArtifactList(player)); break
       case 'artifactReward': if (pendingArtifact) await display.showArtifactReward(pendingArtifact); break
-      case 'exitConfirm':    await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
       default: break
     }
   } catch (e) {
@@ -482,15 +478,13 @@ function setupEventListener() {
       await showPause(); return
     }
 
-    // ─── Doppio click = schermata conferma uscita ─────────────────────────
-    // shutDownPageContainer(1) non è supportato dal simulatore Even Hub.
-    // Usiamo la nostra schermata di conferma custom, che funziona ovunque.
-    // Gestito PRIMA di handlingInput così non viene mai scartato.
+    // ─── Doppio click ─────────────────────────────────────────────────────
+    // Regola Even Hub (obbligatoria per la review): sulla root page il doppio
+    // tap DEVE chiamare shutDownPageContainer(1) → dialogo di uscita nativo.
+    // Sulle altre schermate il doppio tap "torna indietro". Gestito PRIMA di
+    // handlingInput così non viene mai scartato dalla serializzazione input.
     if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
-      preExitScreen = currentScreen
-      exitConfirmIdx = 0
-      currentScreen = 'exitConfirm'
-      await display.update(display.buildExitConfirmScreen(exitConfirmIdx))
+      await handleDoublePress()
       return
     }
 
@@ -567,14 +561,6 @@ async function handlePress() {
     },
     error: async () => { await initialize() },
     artifactReward: handleArtifactRewardPress,
-    exitConfirm: async () => {
-      if (exitConfirmIdx === 1) {
-        await bridge.shutDownPageContainer(0)   // uscita immediata (exitMode 0)
-      } else {
-        currentScreen = preExitScreen
-        await refreshCurrentScreen()
-      }
-    },
   }
 
   const handler = handlers[currentScreen]
@@ -728,9 +714,6 @@ async function handleSwipeUp() {
       rankUpIdx = Math.max(0, rankUpIdx - 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
-    case 'exitConfirm':
-      exitConfirmIdx = Math.max(0, exitConfirmIdx - 1)
-      await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const upItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       if (rankingIdx > 0) {
@@ -774,9 +757,6 @@ async function handleSwipeDown() {
       rankUpIdx = Math.min(1, rankUpIdx + 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
-    case 'exitConfirm':
-      exitConfirmIdx = Math.min(1, exitConfirmIdx + 1)
-      await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const downItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       const maxIdx = downItems.length
@@ -791,6 +771,19 @@ async function handleSwipeDown() {
       break
     }
   }
+}
+
+// ─── Doppio click (regola Even Hub) ────────────────────────────────────────────
+// Root/home page (questList) → shutDownPageContainer(1): dialogo di uscita
+// NATIVO dell'OS host. OBBLIGATORIO per la review Even Hub (mode 0 = rifiuto).
+// Schermate non-root → torna alla home. Durante il setup (player non ancora
+// creato) il doppio tap apre comunque il dialogo di uscita.
+async function handleDoublePress() {
+  if (currentScreen === 'questList' || !player) {
+    await bridge.shutDownPageContainer(1)
+    return
+  }
+  await goToQuestList()
 }
 
 main().catch(async (err) => {
