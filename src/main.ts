@@ -76,6 +76,7 @@ let selectedRankingEntry: RankingEntry | null = null
 let handlingInput = false
 let pendingPress = false   // click queued while a scroll was being processed
 let isPaused = false       // true while the glasses are in background (phone in use)
+let pauseTimer: ReturnType<typeof setTimeout> | null = null  // debounce for browser visibility events
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -129,15 +130,29 @@ async function main() {
   await initialize()
   setupEventListener()
 
-  // ─── Fallback: visibilitychange funziona anche quando FOREGROUND_EXIT_EVENT
-  // non viene recapitato al JS (il WebView viene sospeso prima) ────────────────
+  // ─── Fallback: visibilitychange / pagehide fire when FOREGROUND_EXIT_EVENT
+  // is not delivered to JS (WebView suspended before SDK event reaches it).
+  // We debounce by 1500 ms: transient WebView operations (BLE, screen dim,
+  // system checks) restore visibility in under a second, so they never
+  // trigger the pause screen. Only genuine phone-app switches stay hidden
+  // long enough to fire.
+  const schedulePause = () => {
+    if (pauseTimer) return               // already scheduled
+    pauseTimer = setTimeout(() => {
+      pauseTimer = null
+      showPause().catch(() => {})
+    }, 1500)
+  }
+  const cancelPause = () => {
+    if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null }
+    restoreFromPause().catch(() => {})
+  }
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) showPause().catch(() => {})
-    else restoreFromPause().catch(() => {})
+    if (document.hidden) schedulePause()
+    else cancelPause()
   })
-  // pagehide è un secondo fallback per browser/WebView che usano BFCache
-  window.addEventListener('pagehide', () => { showPause().catch(() => {}) })
-  window.addEventListener('pageshow', () => { restoreFromPause().catch(() => {}) })
+  window.addEventListener('pagehide', schedulePause)
+  window.addEventListener('pageshow', cancelPause)
 }
 
 async function initialize() {
