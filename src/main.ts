@@ -79,6 +79,11 @@ let pendingPress = false   // click queued while a scroll was being processed
 let isPaused = false       // true while the glasses are in background (phone in use)
 let pauseTimer: ReturnType<typeof setTimeout> | null = null  // debounce for browser visibility events
 
+// Doppio-click rilevato a tempo: due CLICK in meno di 500 ms = doppio tocco.
+// Necessario perché alcuni firmware mandano due CLICK invece di DOUBLE_CLICK_EVENT.
+let lastClickTime = 0
+const DBL_CLICK_MS = 500
+
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
 let warningExpLost = 0
@@ -464,6 +469,23 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
+    // ─── DIAGNOSTICA TEMPORANEA ───────────────────────────────────────────
+    // Mostra gli ultimi eventi sullo schermo per capire cosa manda il ring.
+    // DA RIMUOVERE appena il doppio-click funziona correttamente.
+    const rawDbg = JSON.stringify({
+      top:  event?.eventType,
+      txt:  event?.textEvent?.eventType,
+      sys:  event?.sysEvent?.eventType,
+      lst:  event?.listEvent?.eventType,
+      keys: Object.keys(event ?? {}),
+    })
+    try {
+      await display.update(
+        `[DBG EVENT]\n${rawDbg.slice(0, 100)}\nscreen:${currentScreen}`
+      )
+    } catch {}
+    // ─────────────────────────────────────────────────────────────────────
+
     const raw = event?.eventType
       ?? event?.textEvent?.eventType
       ?? event?.sysEvent?.eventType
@@ -477,15 +499,24 @@ function setupEventListener() {
     if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
       await showPause(); return
     }
-    // ─── Doppio click = uscita ────────────────────────────────────────────
-    // Gestito in cima e SEMPRE (anche in pausa o mentre un altro input è in
-    // corso): è un gesto deliberato e non deve mai essere scartato dalla
-    // serializzazione input. Mostra il dialog nativo Even (esci / rimani).
-    if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
+
+    // ─── Doppio click = dialog uscita Even Hub ────────────────────────────
+    // Rilevato in DUE modi (alcuni firmware mandano DOUBLE_CLICK, altri due
+    // CLICK ravvicinati). Gestito PRIMA di qualsiasi filtro/serializzazione.
+    const isDoubleClick =
+      eventType === OsEventTypeList.DOUBLE_CLICK_EVENT ||
+      (eventType === OsEventTypeList.CLICK_EVENT && Date.now() - lastClickTime < DBL_CLICK_MS)
+
+    if (isDoubleClick) {
+      lastClickTime = 0   // reset per non triggerare di nuovo
       await bridge.shutDownPageContainer(1)
       return
     }
-    // Quando l'app è in pausa (telefono in uso) ogni altro input è ignorato.
+    if (eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined) {
+      lastClickTime = Date.now()
+    }
+
+    // Quando l'app è in pausa ogni altro input è ignorato.
     if (isPaused) return
 
     // Filter out exit/IMU events; pass through click/scroll/undefined
