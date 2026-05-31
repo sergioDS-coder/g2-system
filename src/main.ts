@@ -78,6 +78,7 @@ let handlingInput = false
 let pendingPress = false   // click queued while a scroll was being processed
 let isPaused = false       // true while the glasses are in background (phone in use)
 let pauseTimer: ReturnType<typeof setTimeout> | null = null  // debounce for browser visibility events
+let suppressPauseUntil = 0 // timestamp: ignora pause/lifecycle fino a questo momento
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -138,9 +139,11 @@ async function main() {
   // trigger the pause screen. Only genuine phone-app switches stay hidden
   // long enough to fire.
   const schedulePause = () => {
-    if (pauseTimer) return               // already scheduled
+    if (pauseTimer) return
+    if (Date.now() < suppressPauseUntil) return  // exit dialog aperto, ignora
     pauseTimer = setTimeout(() => {
       pauseTimer = null
+      if (Date.now() < suppressPauseUntil) return  // ricontrolla alla scadenza
       showPause().catch(() => {})
     }, 1500)
   }
@@ -475,6 +478,7 @@ function setupEventListener() {
       await restoreFromPause(); return
     }
     if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
+      if (Date.now() < suppressPauseUntil) return  // dialogo uscita aperto, ignora
       await showPause(); return
     }
 
@@ -768,6 +772,10 @@ async function handleSwipeDown() {
 // Nel simulatore non funziona (warning "no active event container") ma
 // sul dispositivo reale appare correttamente come overlay nativo.
 async function handleDoublePress() {
+  // Sopprimi la schermata di pausa per 6s: il dialogo nativo di uscita
+  // nasconde brevemente il WebView, scattando visibilitychange/FOREGROUND_EXIT
+  // che altrimenti mostrerebbero la schermata di pausa sopra il dialogo.
+  suppressPauseUntil = Date.now() + 6000
   await bridge.shutDownPageContainer(1)
 }
 
