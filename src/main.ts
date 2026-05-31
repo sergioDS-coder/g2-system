@@ -50,7 +50,7 @@ type Screen =
   | 'warning' | 'questList' | 'questDetail'
   | 'levelUp' | 'rankUp' | 'profile' | 'artifacts'
   | 'ranking' | 'rankingDetail' | 'error'
-  | 'artifactReward'
+  | 'artifactReward' | 'exitConfirm'
 
 let currentScreen: Screen = 'boot'
 let display: G2Display
@@ -79,18 +79,8 @@ let pendingPress = false   // click queued while a scroll was being processed
 let isPaused = false       // true while the glasses are in background (phone in use)
 let pauseTimer: ReturnType<typeof setTimeout> | null = null  // debounce for browser visibility events
 
-// Doppio-click rilevato a tempo: due CLICK in meno di 500 ms = doppio tocco.
-// Necessario perché alcuni firmware mandano due CLICK invece di DOUBLE_CLICK_EVENT.
-let lastClickTime = 0
-const DBL_CLICK_MS = 500
-
-// ─── MONITOR EVENTI (diagnostica temporanea) ─────────────────────────────────
-// Quando true l'app NON naviga: ogni evento viene accumulato e mostrato a
-// schermo. Serve a vedere cosa manda davvero il ring sul doppio tocco.
-// Mettere a false (o rimuovere) appena risolto.
-const DEBUG_MONITOR = true
-const dbgLog: string[] = []
-let dbgLastTime = 0
+let exitConfirmIdx = 0           // 0 = NO (default sicuro), 1 = SÌ
+let preExitScreen: Screen = 'questList'
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -140,14 +130,6 @@ async function main() {
   const supaUrl = import.meta.env.VITE_SUPABASE_URL as string
   const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
   supabase = new SupabaseClient(supaUrl, supaKey)
-
-  // In DEBUG_MONITOR mode non inizializziamo: l'app resta su schermo
-  // full-width (1 container) così display.update() funziona sempre.
-  if (DEBUG_MONITOR) {
-    await display.update('== EVENT MONITOR ==\n\nTocca e scorri il ring.\nDoppio tocco per testare\nil dialogo di uscita.\n\nIn attesa di eventi...')
-    setupEventListener()
-    return
-  }
 
   await initialize()
   setupEventListener()
@@ -364,6 +346,7 @@ async function refreshCurrentScreen() {
       case 'rankingDetail': if (selectedRankingEntry) await display.update(display.buildRankingDetail(selectedRankingEntry, rankingPage * 4 + rankingIdx + 1)); break
       case 'artifacts':   await display.update(display.buildArtifactList(player)); break
       case 'artifactReward': if (pendingArtifact) await display.showArtifactReward(pendingArtifact); break
+      case 'exitConfirm':    await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
       default: break
     }
   } catch (e) {
@@ -485,30 +468,6 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    // ─── MONITOR EVENTI (diagnostica temporanea) ──────────────────────────
-    if (DEBUG_MONITOR) {
-      const now = Date.now()
-      const delta = dbgLastTime ? now - dbgLastTime : 0
-      dbgLastTime = now
-      const t = event?.eventType ?? event?.textEvent?.eventType
-             ?? event?.sysEvent?.eventType ?? event?.listEvent?.eventType
-      const src = event?.textEvent ? 'txt' : event?.sysEvent ? 'sys'
-               : event?.listEvent ? 'lst' : event?.eventType !== undefined ? 'top' : '?'
-      const isDbl = OsEventTypeList.fromJson(t) === OsEventTypeList.DOUBLE_CLICK_EVENT
-      dbgLog.unshift(`type=${t} (${src}) +${delta}ms${isDbl ? ' DBL!' : ''}`)
-      if (dbgLog.length > 6) dbgLog.pop()
-      try {
-        await display.update(['== EVENT MONITOR ==', '', ...dbgLog].join('\n'))
-      } catch {}
-      // TEST: sul doppio click chiama il dialog di uscita Even (exitMode 1).
-      // Se compare un dialogo nativo "esci/rimani" → exit(1) funziona.
-      if (isDbl) {
-        try { await bridge.shutDownPageContainer(1) } catch {}
-      }
-      return   // nessuna navigazione finché il monitor è attivo
-    }
-    // ──────────────────────────────────────────────────────────────────────
-
     const raw = event?.eventType
       ?? event?.textEvent?.eventType
       ?? event?.sysEvent?.eventType
@@ -523,20 +482,16 @@ function setupEventListener() {
       await showPause(); return
     }
 
-    // ─── Doppio click = dialog uscita Even Hub ────────────────────────────
-    // Rilevato in DUE modi (alcuni firmware mandano DOUBLE_CLICK, altri due
-    // CLICK ravvicinati). Gestito PRIMA di qualsiasi filtro/serializzazione.
-    const isDoubleClick =
-      eventType === OsEventTypeList.DOUBLE_CLICK_EVENT ||
-      (eventType === OsEventTypeList.CLICK_EVENT && Date.now() - lastClickTime < DBL_CLICK_MS)
-
-    if (isDoubleClick) {
-      lastClickTime = 0   // reset per non triggerare di nuovo
-      await bridge.shutDownPageContainer(1)
+    // ─── Doppio click = schermata conferma uscita ─────────────────────────
+    // shutDownPageContainer(1) non è supportato dal simulatore Even Hub.
+    // Usiamo la nostra schermata di conferma custom, che funziona ovunque.
+    // Gestito PRIMA di handlingInput così non viene mai scartato.
+    if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
+      preExitScreen = currentScreen
+      exitConfirmIdx = 0
+      currentScreen = 'exitConfirm'
+      await display.update(display.buildExitConfirmScreen(exitConfirmIdx))
       return
-    }
-    if (eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined) {
-      lastClickTime = Date.now()
     }
 
     // Quando l'app è in pausa ogni altro input è ignorato.
@@ -612,6 +567,14 @@ async function handlePress() {
     },
     error: async () => { await initialize() },
     artifactReward: handleArtifactRewardPress,
+    exitConfirm: async () => {
+      if (exitConfirmIdx === 1) {
+        await bridge.shutDownPageContainer(0)   // uscita immediata (exitMode 0)
+      } else {
+        currentScreen = preExitScreen
+        await refreshCurrentScreen()
+      }
+    },
   }
 
   const handler = handlers[currentScreen]
@@ -765,6 +728,9 @@ async function handleSwipeUp() {
       rankUpIdx = Math.max(0, rankUpIdx - 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
+    case 'exitConfirm':
+      exitConfirmIdx = Math.max(0, exitConfirmIdx - 1)
+      await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const upItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       if (rankingIdx > 0) {
@@ -808,6 +774,9 @@ async function handleSwipeDown() {
       rankUpIdx = Math.min(1, rankUpIdx + 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
+    case 'exitConfirm':
+      exitConfirmIdx = Math.min(1, exitConfirmIdx + 1)
+      await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const downItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       const maxIdx = downItems.length
