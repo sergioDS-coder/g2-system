@@ -77,8 +77,9 @@ let selectedRankingEntry: RankingEntry | null = null
 let handlingInput = false
 let pendingPress = false   // click queued while a scroll was being processed
 let isPaused = false       // true while the glasses are in background (phone in use)
-let pauseTimer: ReturnType<typeof setTimeout> | null = null  // debounce for browser visibility events
 let suppressPauseUntil = 0 // timestamp: ignora pause/lifecycle fino a questo momento
+let lastClickTime = 0      // timestamp ultimo click, per rilevare il doppio click via software
+const DOUBLE_CLICK_MS = 400 // finestra entro cui due click contano come doppio click
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -132,31 +133,12 @@ async function main() {
   await initialize()
   setupEventListener()
 
-  // ─── Fallback: visibilitychange / pagehide fire when FOREGROUND_EXIT_EVENT
-  // is not delivered to JS (WebView suspended before SDK event reaches it).
-  // We debounce by 1500 ms: transient WebView operations (BLE, screen dim,
-  // system checks) restore visibility in under a second, so they never
-  // trigger the pause screen. Only genuine phone-app switches stay hidden
-  // long enough to fire.
-  const schedulePause = () => {
-    if (pauseTimer) return
-    if (Date.now() < suppressPauseUntil) return  // exit dialog aperto, ignora
-    pauseTimer = setTimeout(() => {
-      pauseTimer = null
-      if (Date.now() < suppressPauseUntil) return  // ricontrolla alla scadenza
-      showPause().catch(() => {})
-    }, 1500)
-  }
-  const cancelPause = () => {
-    if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null }
-    restoreFromPause().catch(() => {})
-  }
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) schedulePause()
-    else cancelPause()
-  })
-  window.addEventListener('pagehide', schedulePause)
-  window.addEventListener('pageshow', cancelPause)
+  // La pausa è gestita ESCLUSIVAMENTE dagli eventi SDK del firmware
+  // (FOREGROUND_EXIT_EVENT / FOREGROUND_ENTER_EVENT), che la guida Even Hub
+  // garantisce come canale affidabile. Il vecchio fallback su visibilitychange/
+  // pagehide del browser generava falsi positivi: il WebView si nasconde
+  // per molte ragioni transitorie (BLE, dim schermo, check di sistema) anche
+  // quando l'utente NON sta usando il telefono → schermata di pausa errata.
 }
 
 async function initialize() {
@@ -482,8 +464,11 @@ function setupEventListener() {
       await showPause(); return
     }
 
-    // ─── Doppio click ─────────────────────────────────────────────────────
-    if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
+    // ─── Doppio click (firmware) ──────────────────────────────────────────
+    // Confronto robusto: enum normalizzato OPPURE valore grezzo 3 (alcune
+    // versioni firmware non passano da fromJson correttamente).
+    if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT || raw === 3 || raw === '3') {
+      lastClickTime = 0
       await handleDoublePress(); return
     }
 
@@ -495,6 +480,18 @@ function setupEventListener() {
      && eventType !== undefined) return
 
     const isClick = eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined
+
+    // ─── Doppio click (software) ──────────────────────────────────────────
+    // Fallback: se il firmware non invia DOUBLE_CLICK_EVENT ma due CLICK
+    // ravvicinati, li interpretiamo come doppio click → dialogo di uscita.
+    if (isClick) {
+      const now = Date.now()
+      if (now - lastClickTime < DOUBLE_CLICK_MS) {
+        lastClickTime = 0
+        await handleDoublePress(); return
+      }
+      lastClickTime = now
+    }
 
     // ─── Input serialization ──────────────────────────────────────────────
     if (handlingInput) {
