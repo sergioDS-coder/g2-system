@@ -50,7 +50,7 @@ type Screen =
   | 'warning' | 'questList' | 'questDetail'
   | 'levelUp' | 'rankUp' | 'profile' | 'artifacts'
   | 'ranking' | 'rankingDetail' | 'error'
-  | 'artifactReward'
+  | 'artifactReward' | 'exitConfirm'
 
 let currentScreen: Screen = 'boot'
 let display: G2Display
@@ -77,6 +77,9 @@ let selectedRankingEntry: RankingEntry | null = null
 let handlingInput = false
 let pendingPress = false   // click queued while a scroll was being processed
 let isPaused = false       // true while the glasses are in background (phone in use)
+
+let exitConfirmIdx = 0            // 0 = NO (default sicuro), 1 = SÌ
+let preExitScreen: Screen = 'questList'  // schermata da ripristinare se l'utente annulla
 let pauseTimer: ReturnType<typeof setTimeout> | null = null  // debounce for browser visibility events
 
 let pendingLevelUp: { oldLevel: number } | null = null
@@ -343,6 +346,7 @@ async function refreshCurrentScreen() {
       case 'rankingDetail': if (selectedRankingEntry) await display.update(display.buildRankingDetail(selectedRankingEntry, rankingPage * 4 + rankingIdx + 1)); break
       case 'artifacts':   await display.update(display.buildArtifactList(player)); break
       case 'artifactReward': if (pendingArtifact) await display.showArtifactReward(pendingArtifact); break
+      case 'exitConfirm':    await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
       default: break
     }
   } catch (e) {
@@ -558,6 +562,14 @@ async function handlePress() {
     },
     error: async () => { await initialize() },
     artifactReward: handleArtifactRewardPress,
+    exitConfirm: async () => {
+      if (exitConfirmIdx === 1) {
+        await bridge.shutDownPageContainer(1)
+      } else {
+        currentScreen = preExitScreen
+        await refreshCurrentScreen()
+      }
+    },
   }
 
   const handler = handlers[currentScreen]
@@ -711,6 +723,9 @@ async function handleSwipeUp() {
       rankUpIdx = Math.max(0, rankUpIdx - 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
+    case 'exitConfirm':
+      exitConfirmIdx = Math.max(0, exitConfirmIdx - 1)
+      await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const upItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       if (rankingIdx > 0) {
@@ -754,6 +769,9 @@ async function handleSwipeDown() {
       rankUpIdx = Math.min(1, rankUpIdx + 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
+    case 'exitConfirm':
+      exitConfirmIdx = Math.min(1, exitConfirmIdx + 1)
+      await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const downItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       const maxIdx = downItems.length
@@ -771,9 +789,13 @@ async function handleSwipeDown() {
 }
 
 async function handleDoublePress() {
-  // Double-click during normal use: no action.
-  // Double-click while paused (phone in use) is handled separately in
-  // setupEventListener and calls shutDownPageContainer(1).
+  // Mostra la schermata di conferma uscita (richiesta Even Hub).
+  // Il doppio click mentre l'app è in pausa chiama direttamente
+  // shutDownPageContainer(1) tramite il guard isPaused in setupEventListener.
+  preExitScreen = currentScreen
+  exitConfirmIdx = 0   // default su NO — evita uscite accidentali
+  currentScreen = 'exitConfirm'
+  await display.update(display.buildExitConfirmScreen(exitConfirmIdx))
 }
 
 main().catch(async (err) => {
