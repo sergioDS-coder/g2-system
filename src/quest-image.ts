@@ -644,9 +644,48 @@ function drawDefault(ctx: CanvasRenderingContext2D, w: number, _h: number) {
   capsule(ctx, cx, 188, cx + 22, 258, 12)
 }
 
+/** Jolly / surprise quest: a bolt of lightning over a glowing aura, giving the
+ *  random "wild card" quest its own visual identity instead of the generic
+ *  silhouette fallback. */
+function drawJolly(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const cx = w / 2
+  const cy = h / 2
+
+  // Aura glow behind the bolt
+  for (let r = 92; r >= 36; r -= 18) {
+    ctx.globalAlpha = 0.08
+    ctx.beginPath()
+    ctx.arc(cx, cy, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+  ctx.globalAlpha = 1
+
+  // Lightning bolt (filled polygon)
+  ctx.beginPath()
+  ctx.moveTo(cx + 18, cy - 96)
+  ctx.lineTo(cx - 34, cy + 6)
+  ctx.lineTo(cx - 2,  cy + 6)
+  ctx.lineTo(cx - 20, cy + 96)
+  ctx.lineTo(cx + 40, cy - 22)
+  ctx.lineTo(cx + 6,  cy - 22)
+  ctx.lineTo(cx + 36, cy - 96)
+  ctx.closePath()
+  ctx.fill()
+
+  // Sparkle accents
+  ctx.font = 'bold 28px monospace'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.globalAlpha = 0.7
+  ctx.fillText('✦', cx - 58, cy - 60)
+  ctx.fillText('✦', cx + 58, cy + 60)
+  ctx.globalAlpha = 1
+}
+
 // ── Illustration map ───────────────────────────────────────────────────────────
 
 const ILLUSTRATIONS: Record<string, (ctx: CanvasRenderingContext2D, w: number, h: number) => void> = {
+  jolly: drawJolly,
   corsa: drawRunning,
   flessioni: drawPushup,
   addominali: drawCrunches,

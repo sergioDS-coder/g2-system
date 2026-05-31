@@ -36,7 +36,6 @@ export async function generateDailyQuestsAI(
   language: string,
   count: number
 ): Promise<DailyQuest[] | null> {
-  console.log('[AI] Generating daily quests...')
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 8000)
 
@@ -72,13 +71,21 @@ export async function generateJollyQuest(
   level: number,
   language: string
 ): Promise<DailyQuest | null> {
+  // Come le quest giornaliere: abortiamo dopo 6s. Senza timeout una funzione
+  // Netlify/Gemini lenta lasciava la Jolly in attesa indefinita → fallback mai
+  // raggiunto e Jolly di fatto mai mostrata su connessioni instabili.
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 6000)
+
   try {
     const response = await fetch(FUNCTION_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ level, language, mode: 'jolly' }),
+      signal: controller.signal,
     })
 
+    clearTimeout(timeoutId)
     if (!response.ok) return null
 
     const data = await response.json()
@@ -100,6 +107,7 @@ export async function generateJollyQuest(
       icon: 'sword',
     }
   } catch (err) {
+    clearTimeout(timeoutId)
     console.error('Errore quest jolly:', err)
     return null
   }
