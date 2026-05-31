@@ -494,11 +494,17 @@ function setupEventListener() {
              ?? event?.sysEvent?.eventType ?? event?.listEvent?.eventType
       const src = event?.textEvent ? 'txt' : event?.sysEvent ? 'sys'
                : event?.listEvent ? 'lst' : event?.eventType !== undefined ? 'top' : '?'
-      dbgLog.unshift(`type=${t} (${src}) +${delta}ms`)
-      if (dbgLog.length > 7) dbgLog.pop()
+      const isDbl = OsEventTypeList.fromJson(t) === OsEventTypeList.DOUBLE_CLICK_EVENT
+      dbgLog.unshift(`type=${t} (${src}) +${delta}ms${isDbl ? ' DBL!' : ''}`)
+      if (dbgLog.length > 6) dbgLog.pop()
       try {
         await display.update(['== EVENT MONITOR ==', '', ...dbgLog].join('\n'))
       } catch {}
+      // TEST: sul doppio click chiama il dialog di uscita Even (exitMode 1).
+      // Se compare un dialogo nativo "esci/rimani" → exit(1) funziona.
+      if (isDbl) {
+        try { await bridge.shutDownPageContainer(1) } catch {}
+      }
       return   // nessuna navigazione finché il monitor è attivo
     }
     // ──────────────────────────────────────────────────────────────────────
