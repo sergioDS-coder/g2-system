@@ -172,6 +172,44 @@ export interface DailyQuest {
   icon: string
 }
 
+// ─── Jolly locali (fallback quando l'API Gemini non risponde) ────────────────
+// Quest "sorpresa" creative usate solo se generateJollyQuest() torna null.
+// Garantiscono che la Jolly compaia anche offline / con la function lenta.
+interface JollyFallback {
+  name: string
+  attribute: Attribute
+  amount: number
+  unit: string
+  icon: string
+}
+
+const JOLLY_FALLBACK: JollyFallback[] = [
+  { name: 'Cold shower',   attribute: 'vit', amount: 1,   unit: 'min',   icon: 'meditate' },
+  { name: 'Write 3 goals', attribute: 'int', amount: 3,   unit: 'goals', icon: 'book' },
+  { name: 'No sugar today',attribute: 'vit', amount: 1,   unit: 'day',   icon: 'meditate' },
+  { name: '100 jumps',     attribute: 'str', amount: 100, unit: 'reps',  icon: 'pushup' },
+  { name: 'Learn 5 words', attribute: 'int', amount: 5,   unit: 'words', icon: 'book' },
+]
+
+export function generateLocalJolly(level: number): DailyQuest {
+  const pick = JOLLY_FALLBACK[Math.floor(Math.random() * JOLLY_FALLBACK.length)]
+  const dateStr = new Date().toISOString().slice(0, 10)
+  return {
+    id: `${dateStr}_jolly_${Date.now()}`,
+    templateId: 'jolly',
+    type: 'jolly',
+    nameKey: 'reward',
+    attribute: pick.attribute,
+    unit: pick.unit,
+    amount: pick.amount,
+    expReward: 200 + level * 10,
+    completed: false,
+    date: dateStr,
+    jollyName: pick.name,
+    icon: pick.icon,
+  }
+}
+
 function pickVariantForLevel(template: QuestTemplate, level: number): number {
   const totalVariants = template.variants.length
   // Più livello → variante più alta

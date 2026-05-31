@@ -1,4 +1,4 @@
-// main.ts — G2 System v2.0.0
+// main.ts — G2 System v2.1.0
 
 import {
   waitForEvenAppBridge,
@@ -13,8 +13,9 @@ import {
 } from './game-engine'
 
 import { rollArtifactReward, calcExpMultiplier, calcPenaltyReduction, type ArtifactId } from './artifact-data'
-import { type DailyQuest, generateDailyQuests } from './quest-data'
+import { type DailyQuest, generateDailyQuests, generateLocalJolly } from './quest-data'
 import { generateDailyQuestsAI, generateJollyQuest } from './ai-quest'
+import { renderClassImage } from './artifact-image'
 import { SupabaseClient, type RankingEntry } from './supabase-client'
 import { G2Display } from './g2-display'
 import { initBridgeStorage } from './bridge-storage'
@@ -177,6 +178,14 @@ async function initialize() {
   }
 
   display.setLang(player.language as Lang)
+
+  // Pre-warm dell'icona classe in background: la pipeline immagine è lenta e
+  // veniva eseguita solo all'apertura del profilo. Scaldando la cache adesso
+  // (zero impatto visivo) il profilo si apre poi all'istante.
+  if (player.playerClass) {
+    renderClassImage(player.playerClass).catch(() => {})
+  }
+
   quests = await loadQuests()
   const today = new Date().toISOString().slice(0, 10)
 
@@ -234,9 +243,12 @@ async function initialize() {
     const aiQuests = await generateDailyQuestsAI(player.level, player.language, count)
     quests = aiQuests ?? generateDailyQuests(player.level, count, today)
 
-    if (Math.random() < 0.1) {
+    // Jolly: 20% di probabilità. Se l'API non risponde si usa il pool locale,
+    // così la quest sorpresa non viene più silenziata da una function lenta.
+    if (Math.random() < 0.20) {
       const jolly = await generateJollyQuest(player.level, player.language)
-      if (jolly) quests.push(jolly)
+                 ?? generateLocalJolly(player.level)
+      quests.push(jolly)
     }
 
     await saveQuests(quests)
@@ -452,23 +464,11 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    // ─── Diagnostic (keep until click confirmed working) ──────────────────
-    try {
-      console.log('[G2-EVENT]', JSON.stringify({
-        text: event?.textEvent?.eventType,
-        sys: event?.sysEvent?.eventType,
-        list: event?.listEvent?.eventType,
-        top: event?.eventType,
-        keys: Object.keys(event ?? {}),
-      }))
-    } catch { console.log('[G2-EVENT] (unserializable)') }
-
     const raw = event?.eventType
       ?? event?.textEvent?.eventType
       ?? event?.sysEvent?.eventType
       ?? event?.listEvent?.eventType
     const eventType = OsEventTypeList.fromJson(raw)
-    console.log('[G2-EVENT] raw=', raw, '→ type=', eventType, 'busy=', handlingInput)
 
     // ─── Lifecycle ────────────────────────────────────────────────────────
     if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
@@ -493,15 +493,13 @@ function setupEventListener() {
      && eventType !== undefined) return
 
     const isClick = eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined
-    const isScroll = eventType === OsEventTypeList.SCROLL_TOP_EVENT || eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT
 
     // ─── Input serialization ──────────────────────────────────────────────
     // If busy handling a previous event, queue the click so it fires as soon
     // as the scroll BLE update completes — this is the typical "rotate to item,
-    // immediately press to confirm" gesture.
+    // immediately press to confirm" gesture. Scrolls while busy are dropped.
     if (handlingInput) {
-      if (isClick) { pendingPress = true; console.log('[G2-INPUT] click queued') }
-      else if (isScroll) console.log('[G2-INPUT] scroll dropped (busy)')
+      if (isClick) pendingPress = true
       return
     }
 
@@ -517,7 +515,6 @@ function setupEventListener() {
       } else {
         // CLICK_EVENT (0) or undefined
         pendingPress = false
-        console.log('[G2-INPUT] handlePress on screen:', currentScreen)
         await handlePress()
       }
     } finally {
@@ -527,11 +524,10 @@ function setupEventListener() {
       // ─── Flush queued click (fired while scroll was processing) ──────────
       if (pendingPress) {
         pendingPress = false
-        console.log('[G2-INPUT] flushing queued click, screen:', currentScreen)
         handlingInput = true
         const watchdog2 = setTimeout(() => { handlingInput = false }, 8000)
         try { await handlePress() }
-        catch (e) { console.error('[G2-INPUT] queued click failed:', e) }
+        catch (e) { console.error('[G2] queued click failed:', e) }
         finally { clearTimeout(watchdog2); handlingInput = false }
       }
     }
@@ -541,7 +537,6 @@ function setupEventListener() {
 // ─── Handlers Click ───────────────────────────────────────────────────────────
 
 async function handlePress() {
-  console.log('[G2-PRESS] screen=', currentScreen, 'questIdx=', questIdx)
   const handlers: Record<Screen, () => Promise<void>> = {
     boot: async () => {},
     setup: async () => { await initialize() },
@@ -569,12 +564,9 @@ async function handlePress() {
   if (handler) {
     try {
       await handler()
-      console.log('[G2-PRESS] handler done, now on screen:', currentScreen)
     } catch (e) {
-      console.error('[G2-PRESS] handler threw:', e)
+      console.error('[G2] handler threw:', e)
     }
-  } else {
-    console.warn('[G2-PRESS] no handler for screen:', currentScreen)
   }
 }
 

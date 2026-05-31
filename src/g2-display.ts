@@ -25,7 +25,7 @@ const TEXT_X = IMG_W        // text container starts after image
 const TEXT_W = W - IMG_W    // 396px → ~19 chars per line
 const SHORT_LINE = '───────────────────'  // fits in narrow text container
 const LINE = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-export const VERSION = 'v2.0.2'
+export const VERSION = 'v2.1.0'
 
 
 function truncate(text: string, maxLen: number): string {
@@ -113,7 +113,7 @@ export class G2Display {
     ]
 
     quests.forEach((q, i) => {
-      const status = q.completed ? '●' : '○'
+      const status = q.completed ? '●' : q.type === 'jolly' ? '⚡' : '○'
       const name = q.jollyName ?? ((tr as any)[q.nameKey] ?? q.nameKey)
       const label = truncate(`${name} ${q.amount}${q.unit}`, 16)
       lines.push(`${c(i)}${status} ${label}`)
@@ -283,7 +283,7 @@ export class G2Display {
     ].join('\n')
   }
 
-buildPauseScreen(): string {
+  buildPauseScreen(): string {
     return [
       LINE,
       '  G2 SYSTEM — IN PAUSA',

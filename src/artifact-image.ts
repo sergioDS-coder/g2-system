@@ -8,6 +8,12 @@ import { BLACK_THRESHOLD } from './quest-image'
 export const ART_IMG_W = 180
 export const ART_IMG_H = 288
 
+// ─── Cache pixel arrays per evitare ri-elaborazioni costose ──────────────────
+// Come in quest-image.ts: la pipeline PNG→canvas→grayscale→PNG è lenta.
+// Una volta elaborata, l'icona (artefatto o classe) resta in memoria per
+// tutta la sessione, così profilo e schermata artefatto si aprono all'istante.
+const _pixelCache = new Map<string, [number[], number[]]>()
+
 async function loadImageFile(src: string): Promise<HTMLImageElement | null> {
   return new Promise(resolve => {
     const img = new Image()
@@ -68,6 +74,9 @@ const FALLBACK_GLYPHS: Record<string, string> = {
 }
 
 export async function renderArtifactImage(artifactId: string): Promise<[number[], number[]]> {
+  const cacheKey = `artifact_${artifactId}`
+  if (_pixelCache.has(cacheKey)) return _pixelCache.get(cacheKey)!
+
   const canvas = document.createElement('canvas')
   canvas.width = ART_IMG_W
   canvas.height = ART_IMG_H
@@ -87,10 +96,15 @@ export async function renderArtifactImage(artifactId: string): Promise<[number[]
     drawGlyph(ctx, FALLBACK_GLYPHS[artifactId] ?? '✦')
   }
 
-  return [canvasHalfToPng(canvas, 0), canvasHalfToPng(canvas, ART_IMG_H / 2)]
+  const result: [number[], number[]] = [canvasHalfToPng(canvas, 0), canvasHalfToPng(canvas, ART_IMG_H / 2)]
+  _pixelCache.set(cacheKey, result)
+  return result
 }
 
 export async function renderClassImage(classId: string): Promise<[number[], number[]]> {
+  const cacheKey = `class_${classId}`
+  if (_pixelCache.has(cacheKey)) return _pixelCache.get(cacheKey)!
+
   const canvas = document.createElement('canvas')
   canvas.width = ART_IMG_W
   canvas.height = ART_IMG_H
@@ -108,5 +122,7 @@ export async function renderClassImage(classId: string): Promise<[number[], numb
     drawGlyph(ctx, FALLBACK_GLYPHS[classId] ?? '★')
   }
 
-  return [canvasHalfToPng(canvas, 0), canvasHalfToPng(canvas, ART_IMG_H / 2)]
+  const result: [number[], number[]] = [canvasHalfToPng(canvas, 0), canvasHalfToPng(canvas, ART_IMG_H / 2)]
+  _pixelCache.set(cacheKey, result)
+  return result
 }
