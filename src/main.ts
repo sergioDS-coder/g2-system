@@ -464,14 +464,13 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    // Su hardware reale gli scroll arrivano via textEvent (eventType=1/2),
-    // click e double-click via sysEvent (eventType=undefined/3). Quando il
-    // layout è in image-mode (3 container), textEvent esiste ma ha
-    // eventType=undefined per i tap → textEvent ?? sysEvent restituirebbe
-    // textEvent con eventType=undefined, scartando il 3 del sysEvent.
-    // Soluzione: leggere l'eventType dai due canali separatamente e usare
-    // il nullish-coalescing sull'eventType, non sull'oggetto.
-    const eventType = event.textEvent?.eventType ?? event.sysEvent?.eventType
+    // Legge eventType da tutti i possibili canali SDK in ordine di priorità.
+    // Su hardware reale il canale varia: event.eventType (top-level),
+    // event.textEvent.eventType (scroll), event.sysEvent.eventType (tap).
+    const eventType = event?.eventType
+      ?? event?.textEvent?.eventType
+      ?? event?.sysEvent?.eventType
+      ?? event?.listEvent?.eventType
 
     // ─── Lifecycle ────────────────────────────────────────────────────────
     if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
