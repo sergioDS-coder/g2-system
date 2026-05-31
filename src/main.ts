@@ -141,6 +141,14 @@ async function main() {
   const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
   supabase = new SupabaseClient(supaUrl, supaKey)
 
+  // In DEBUG_MONITOR mode non inizializziamo: l'app resta su schermo
+  // full-width (1 container) così display.update() funziona sempre.
+  if (DEBUG_MONITOR) {
+    await display.update('== EVENT MONITOR ==\n\nTocca e scorri il ring.\nDoppio tocco per testare\nil dialogo di uscita.\n\nIn attesa di eventi...')
+    setupEventListener()
+    return
+  }
+
   await initialize()
   setupEventListener()
 
