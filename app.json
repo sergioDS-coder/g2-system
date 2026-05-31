@@ -2,7 +2,7 @@
   "package_id": "com.sergiods.system",
   "name": "G2 System",
   "edition": "202601",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "min_app_version": "1.0.0",
   "min_sdk_version": "0.0.10",
   "entrypoint": "index.html",
@@ -20,7 +20,11 @@
   "permissions": [
     {
       "name": "network",
-      "desc": "Required to sync with global ranking and generate AI quests"
+      "desc": "Required to sync with global ranking and generate AI quests",
+      "whitelist": [
+        "https://g2-system.netlify.app",
+        "https://kfjlhujhoooudkhfblon.supabase.co"
+      ]
     }
   ]
 }

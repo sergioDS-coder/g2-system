@@ -14,36 +14,41 @@ export const ART_IMG_H = 288
 // tutta la sessione, così profilo e schermata artefatto si aprono all'istante.
 const _pixelCache = new Map<string, [number[], number[]]>()
 
-async function loadImageFile(src: string): Promise<HTMLImageElement | null> {
+function _loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise(resolve => {
     const img = new Image()
-    img.onload = () => resolve(img)
+    img.onload  = () => resolve(img)
     img.onerror = () => resolve(null)
     img.src = src
   })
 }
 
-function canvasHalfToPng(canvas: HTMLCanvasElement, sy: number): number[] {
+/** Process all pixels of the full 180×288 canvas in one pass, then encode
+ *  each 180×144 half as a PNG byte array. */
+function _processAndSplit(canvas: HTMLCanvasElement): [number[], number[]] {
   const halfH = ART_IMG_H / 2
-  const c = document.createElement('canvas')
-  c.width = ART_IMG_W
-  c.height = halfH
-  const ctx = c.getContext('2d')!
-  ctx.drawImage(canvas, 0, sy, ART_IMG_W, halfH, 0, 0, ART_IMG_W, halfH)
-
-  const img = ctx.getImageData(0, 0, ART_IMG_W, halfH)
-  const d = img.data
+  const ctx = canvas.getContext('2d')!
+  const raw = ctx.getImageData(0, 0, ART_IMG_W, ART_IMG_H)
+  const d = raw.data
   for (let i = 0; i < d.length; i += 4) {
     const lum = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
     const g = lum < BLACK_THRESHOLD ? 0 : Math.round(lum / 17) * 17
     d[i] = d[i + 1] = d[i + 2] = g
     d[i + 3] = 255
   }
-  ctx.putImageData(img, 0, 0)
+  ctx.putImageData(raw, 0, 0)
+  return [_encodeHalf(canvas, 0), _encodeHalf(canvas, halfH)]
+}
 
-  const base64 = c.toDataURL('image/png').split(',')[1]
-  const binary = atob(base64)
-  return Array.from({ length: binary.length }, (_, i) => binary.charCodeAt(i))
+function _encodeHalf(src: HTMLCanvasElement, sy: number): number[] {
+  const halfH = ART_IMG_H / 2
+  const c = document.createElement('canvas')
+  c.width = ART_IMG_W; c.height = halfH
+  c.getContext('2d')!.drawImage(src, 0, sy, ART_IMG_W, halfH, 0, 0, ART_IMG_W, halfH)
+  const bin = atob(c.toDataURL('image/png').split(',')[1])
+  const out = new Array<number>(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
 }
 
 function drawGlyph(ctx: CanvasRenderingContext2D, glyph: string): void {
@@ -84,19 +89,17 @@ export async function renderArtifactImage(artifactId: string): Promise<[number[]
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, ART_IMG_W, ART_IMG_H)
 
-  const img = await loadImageFile(`/artifact-images/${artifactId}.png`)
+  const img = await _loadImage(`/artifact-images/${artifactId}.png`)
   if (img) {
     const scale = Math.min(ART_IMG_W / img.width, ART_IMG_H / img.height) * 0.88
     const dw = Math.round(img.width * scale)
     const dh = Math.round(img.height * scale)
-    const dx = (ART_IMG_W - dw) / 2
-    const dy = (ART_IMG_H - dh) / 2
-    ctx.drawImage(img, dx, dy, dw, dh)
+    ctx.drawImage(img, (ART_IMG_W - dw) / 2, (ART_IMG_H - dh) / 2, dw, dh)
   } else {
     drawGlyph(ctx, FALLBACK_GLYPHS[artifactId] ?? '✦')
   }
 
-  const result: [number[], number[]] = [canvasHalfToPng(canvas, 0), canvasHalfToPng(canvas, ART_IMG_H / 2)]
+  const result = _processAndSplit(canvas)
   _pixelCache.set(cacheKey, result)
   return result
 }
@@ -112,7 +115,7 @@ export async function renderClassImage(classId: string): Promise<[number[], numb
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, ART_IMG_W, ART_IMG_H)
 
-  const img = await loadImageFile(`/class-images/${classId}.png`)
+  const img = await _loadImage(`/class-images/${classId}.png`)
   if (img) {
     const scale = Math.min(ART_IMG_W / img.width, ART_IMG_H / img.height) * 0.88
     const dw = Math.round(img.width * scale)
@@ -122,7 +125,7 @@ export async function renderClassImage(classId: string): Promise<[number[], numb
     drawGlyph(ctx, FALLBACK_GLYPHS[classId] ?? '★')
   }
 
-  const result: [number[], number[]] = [canvasHalfToPng(canvas, 0), canvasHalfToPng(canvas, ART_IMG_H / 2)]
+  const result = _processAndSplit(canvas)
   _pixelCache.set(cacheKey, result)
   return result
 }

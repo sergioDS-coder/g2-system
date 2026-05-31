@@ -20,13 +20,51 @@ export interface QuestCardInfo {
 }
 
 // ─── Cache pixel arrays per evitare ri-elaborazioni costose ──────────────────
-// Le conversioni PNG→canvas→grayscale→PNG sono lente. Una volta elaborate,
-// i byte vengono tenuti in memoria per tutta la sessione.
 const _pixelCache = new Map<string, [number[], number[]]>()
 
 function _cacheKey(id: string, info?: QuestCardInfo): string {
   return info ? `${id}|${info.type}|${info.attr}|${info.exp}|${info.amount}|${info.unit}` : id
 }
+
+// ─── Primitivi interni ────────────────────────────────────────────────────────
+
+function _loadImage(url: string): Promise<HTMLImageElement | null> {
+  return new Promise(resolve => {
+    const img = new Image()
+    img.onload  = () => resolve(img)
+    img.onerror = () => resolve(null)
+    img.src = url
+  })
+}
+
+/** Quantize + grayscale the full 180×288 canvas in one pass, then encode
+ *  each 180×144 half as a PNG byte array.
+ *  One pass over 51 840 px instead of two separate passes over 25 920 px. */
+function _processAndSplit(canvas: HTMLCanvasElement): [number[], number[]] {
+  const ctx = canvas.getContext('2d')!
+  const raw = ctx.getImageData(0, 0, IMG_W, IMG_H * 2)
+  const d = raw.data
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
+    const g = lum < BLACK_THRESHOLD ? 0 : Math.round(lum / 17) * 17
+    d[i] = d[i + 1] = d[i + 2] = g
+    d[i + 3] = 255
+  }
+  ctx.putImageData(raw, 0, 0)
+  return [_encodeHalf(canvas, 0), _encodeHalf(canvas, IMG_H)]
+}
+
+function _encodeHalf(src: HTMLCanvasElement, sy: number): number[] {
+  const c = document.createElement('canvas')
+  c.width = IMG_W; c.height = IMG_H
+  c.getContext('2d')!.drawImage(src, 0, sy, IMG_W, IMG_H, 0, 0, IMG_W, IMG_H)
+  const bin = atob(c.toDataURL('image/png').split(',')[1])
+  const out = new Array<number>(bin.length)
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+  return out
+}
+
+// ─── Render functions ─────────────────────────────────────────────────────────
 
 export async function renderQuestImages(
   templateId: string,
@@ -42,9 +80,9 @@ export async function renderQuestImages(
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
 
-  const fileCanvas = await loadImageFile(`/quest-images/${templateId}.png`)
-  if (fileCanvas) {
-    ctx.drawImage(fileCanvas, 0, 0)
+  const img = await _loadImage(`/quest-images/${templateId}.png`)
+  if (img) {
+    ctx.drawImage(img, 0, 0, IMG_W, IMG_H * 2)
   } else {
     ctx.fillStyle = '#fff'
     const drawFn = ILLUSTRATIONS[templateId] ?? drawDefault
@@ -53,43 +91,55 @@ export async function renderQuestImages(
 
   if (info) drawCardOverlay(ctx, info)
 
-  const result: [number[], number[]] = [
-    canvasToImageBytes(canvas, 0, 0, IMG_W, IMG_H),
-    canvasToImageBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
-  ]
+  const result = _processAndSplit(canvas)
   _pixelCache.set(key, result)
   return result
 }
 
-/** Loads /wild-quest.png and splits it. Falls back to a Canvas-drawn card.
- *  Result is cached: the first call does the heavy work, subsequent calls
- *  return the pre-computed pixel arrays immediately. */
+/** Loads /wild-quest.png and splits it. Falls back to a Canvas-drawn card. */
 export async function renderWildQuestImage(): Promise<[number[], number[]]> {
-  const CACHE_KEY = 'wild_quest'
-  if (_pixelCache.has(CACHE_KEY)) return _pixelCache.get(CACHE_KEY)!
+  if (_pixelCache.has('wild_quest')) return _pixelCache.get('wild_quest')!
 
-  let result: [number[], number[]]
-  const c = await loadImageFile('/wild-quest.png')
-  if (c) {
-    result = [
-      canvasToImageBytes(c, 0, 0, IMG_W, IMG_H),
-      canvasToImageBytes(c, 0, IMG_H, IMG_W, IMG_H),
-    ]
+  const canvas = document.createElement('canvas')
+  canvas.width = IMG_W; canvas.height = IMG_H * 2
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#000'
+  ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
+
+  const img = await _loadImage('/wild-quest.png')
+  if (img) {
+    ctx.drawImage(img, 0, 0, IMG_W, IMG_H * 2)
   } else {
+    ctx.fillStyle = '#fff'
+    drawWildQuestCard(ctx, IMG_W, IMG_H * 2)
+  }
+
+  const result = _processAndSplit(canvas)
+  _pixelCache.set('wild_quest', result)
+  return result
+}
+
+/** Greeting screen: loads /welcome-images/<rank>.png, falls back to a drawn rank card. */
+export async function renderWelcomeImage(rank: string): Promise<[number[], number[]]> {
+  const key = `welcome_${rank}`
+  if (_pixelCache.has(key)) return _pixelCache.get(key)!
+
+  const img = await _loadImage(`/welcome-images/${rank}.png`)
+  let result: [number[], number[]]
+
+  if (img) {
     const canvas = document.createElement('canvas')
-    canvas.width = IMG_W
-    canvas.height = IMG_H * 2
+    canvas.width = IMG_W; canvas.height = IMG_H * 2
     const ctx = canvas.getContext('2d')!
     ctx.fillStyle = '#000'
     ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
-    ctx.fillStyle = '#fff'
-    drawWildQuestCard(ctx, IMG_W, IMG_H * 2)
-    result = [
-      canvasToImageBytes(canvas, 0, 0, IMG_W, IMG_H),
-      canvasToImageBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
-    ]
+    ctx.drawImage(img, 0, 0, IMG_W, IMG_H * 2)
+    result = _processAndSplit(canvas)
+  } else {
+    result = renderRankCard(rank)
   }
-  _pixelCache.set(CACHE_KEY, result)
+
+  _pixelCache.set(key, result)
   return result
 }
 
@@ -148,27 +198,6 @@ function drawWildQuestCard(ctx: CanvasRenderingContext2D, w: number, h: number) 
   ctx.font = 'bold 26px monospace'
   ctx.fillText('QUEST', w / 2, h - 28)
   ctx.fillStyle = '#fff'
-}
-
-/** Loads /welcome-images/<rank>.png and splits it into the two containers.
- *  Falls back to a Canvas-drawn rank card if the PNG file is not found.
- *  Result is cached per rank. */
-export async function renderWelcomeImage(rank: string): Promise<[number[], number[]]> {
-  const key = `welcome_${rank}`
-  if (_pixelCache.has(key)) return _pixelCache.get(key)!
-
-  let result: [number[], number[]]
-  const c = await loadImageFile(`/welcome-images/${rank}.png`)
-  if (c) {
-    result = [
-      canvasToImageBytes(c, 0, 0, IMG_W, IMG_H),
-      canvasToImageBytes(c, 0, IMG_H, IMG_W, IMG_H),
-    ]
-  } else {
-    result = renderRankCard(rank)
-  }
-  _pixelCache.set(key, result)
-  return result
 }
 
 /** Draws a top "type" header and a bottom stats band over the icon. */
@@ -265,55 +294,7 @@ function renderRankCard(rank: string): [number[], number[]] {
   ctx.font = 'bold 13px monospace'
   ctx.fillText('H U N T E R', W / 2, H - 20)
 
-  return [
-    canvasToImageBytes(canvas, 0, 0, IMG_W, IMG_H),
-    canvasToImageBytes(canvas, 0, IMG_H, IMG_W, IMG_H),
-  ]
-}
-
-function loadImageFile(url: string): Promise<HTMLCanvasElement | null> {
-  return new Promise((resolve) => {
-    const img = new window.Image()
-    img.onload = () => {
-      const c = document.createElement('canvas')
-      c.width = IMG_W
-      c.height = IMG_H * 2
-      const ctx = c.getContext('2d')!
-      ctx.fillStyle = '#000'
-      ctx.fillRect(0, 0, IMG_W, IMG_H * 2)
-      ctx.drawImage(img, 0, 0, IMG_W, IMG_H * 2)
-      resolve(c)
-    }
-    img.onerror = () => resolve(null)
-    img.src = url
-  })
-}
-
-/** Extracts a region, quantizes to 16 gray levels and encodes as PNG.
- *  Returns raw bytes as number[] — the format recommended by the Even SDK for
- *  imageData in ImageRawDataUpdate (number[] is passed as List<int> to Flutter,
- *  which correctly forwards binary to the glasses firmware via BLE). */
-function canvasToImageBytes(src: HTMLCanvasElement, sx: number, sy: number, w: number, h: number): number[] {
-  const c = document.createElement('canvas')
-  c.width = w; c.height = h
-  const ctx = c.getContext('2d')!
-  ctx.drawImage(src, sx, sy, w, h, 0, 0, w, h)
-
-  // Quantize to 16 gray levels before encoding
-  const img = ctx.getImageData(0, 0, w, h)
-  const d = img.data
-  for (let i = 0; i < d.length; i += 4) {
-    const lum = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000
-    const g = lum < BLACK_THRESHOLD ? 0 : Math.round(lum / 17) * 17
-    d[i] = d[i + 1] = d[i + 2] = g
-    d[i + 3] = 255
-  }
-  ctx.putImageData(img, 0, 0)
-
-  // PNG (lossless) → decode base64 → number[] of raw bytes
-  const base64 = c.toDataURL('image/png').split(',')[1]
-  const binary = atob(base64)
-  return Array.from({ length: binary.length }, (_, i) => binary.charCodeAt(i))
+  return _processAndSplit(canvas)
 }
 
 // ── Silhouette primitives ──────────────────────────────────────────────────────
@@ -353,49 +334,34 @@ function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h
 
 function drawRunning(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   const cx = 108, top = 38
-  // head
   head(ctx, cx, top + 22, 22)
-  // torso (leaning forward)
   capsule(ctx, cx, top + 44, cx - 20, top + 118, 14)
-  // arms
-  capsule(ctx, cx - 6, top + 74, cx + 46, top + 46, 9)   // back arm (up-right)
-  capsule(ctx, cx - 6, top + 74, cx - 46, top + 100, 9)  // front arm (down-left)
-  // front leg
+  capsule(ctx, cx - 6, top + 74, cx + 46, top + 46, 9)
+  capsule(ctx, cx - 6, top + 74, cx - 46, top + 100, 9)
   capsule(ctx, cx - 20, top + 118, cx + 22, top + 190, 11)
   capsule(ctx, cx + 22, top + 190, cx + 36, top + 250, 10)
-  // rear leg (kick up)
   capsule(ctx, cx - 20, top + 118, cx - 52, top + 174, 11)
   capsule(ctx, cx - 52, top + 174, cx - 65, top + 130, 9)
 }
 
 function drawWalking(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   const cx = 90, top = 28
-  // head
   head(ctx, cx, top + 22, 22)
-  // torso (upright)
   capsule(ctx, cx, top + 44, cx, top + 122, 13)
-  // arms (one forward, one back)
   capsule(ctx, cx, top + 68, cx + 36, top + 46, 9)
   capsule(ctx, cx, top + 68, cx - 36, top + 90, 9)
-  // front leg
   capsule(ctx, cx, top + 122, cx + 24, top + 198, 11)
   capsule(ctx, cx + 24, top + 198, cx + 28, top + 258, 10)
-  // back leg
   capsule(ctx, cx, top + 122, cx - 18, top + 196, 11)
   capsule(ctx, cx - 18, top + 196, cx - 10, top + 258, 10)
 }
 
 function drawPushup(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   const cy = 138
-  // head
   head(ctx, 148, cy - 50, 20)
-  // torso (angled down-left)
   capsule(ctx, 148, cy - 30, 36, cy + 10, 13)
-  // right arm (bent, near head)
   capsule(ctx, 132, cy - 22, 124, cy + 30, 9)
-  // left arm (straight)
   capsule(ctx, 84, cy - 5, 76, cy + 40, 9)
-  // legs (two close together)
   capsule(ctx, 36, cy + 10, 18, cy + 65, 11)
   capsule(ctx, 18, cy + 65, 16, cy + 108, 10)
   capsule(ctx, 52, cy + 6, 36, cy + 60, 11)
@@ -404,39 +370,29 @@ function drawPushup(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
 
 function drawCrunches(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   const cy = 165
-  // head (raised, upper-left)
   head(ctx, 30, cy - 55, 19)
-  // torso (angled up-left)
   capsule(ctx, 30, cy - 36, 95, cy - 8, 12)
-  // arms reaching forward
   capsule(ctx, 58, cy - 24, 112, cy - 42, 8)
   capsule(ctx, 58, cy - 24, 112, cy - 10, 8)
-  // hips + bent knees
   capsule(ctx, 95, cy - 8, 142, cy + 32, 12)
   capsule(ctx, 142, cy + 32, 112, cy + 80, 10)
   capsule(ctx, 95, cy - 8, 150, cy + 18, 12)
   capsule(ctx, 150, cy + 18, 124, cy + 68, 10)
-  // lower spine to ground
   capsule(ctx, 30, cy - 36, 16, cy + 28, 10)
 }
 
 function drawPlank(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   const cy = 158
-  // head
   head(ctx, 158, cy - 44, 20)
-  // body (horizontal)
   capsule(ctx, 158, cy - 24, 20, cy + 8, 13)
-  // arms (straight down)
   capsule(ctx, 140, cy - 16, 132, cy + 38, 9)
   capsule(ctx, 108, cy - 6, 100, cy + 44, 9)
-  // feet
   capsule(ctx, 20, cy + 8, 16, cy + 54, 10)
   capsule(ctx, 36, cy + 5, 32, cy + 50, 10)
 }
 
 function drawYoga(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   const cx = 90, cy = 155
-  // subtle aura rings
   for (let r = 82; r >= 46; r -= 18) {
     ctx.globalAlpha = 0.09
     ctx.beginPath()
@@ -444,16 +400,12 @@ function drawYoga(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
     ctx.fill()
   }
   ctx.globalAlpha = 1
-  // head
   head(ctx, cx, cy - 90, 22)
-  // torso (straight)
   capsule(ctx, cx, cy - 68, cx, cy - 24, 13)
-  // arms out (hands resting on knees)
   capsule(ctx, cx, cy - 46, cx - 55, cy - 20, 9)
   capsule(ctx, cx - 55, cy - 20, cx - 62, cy + 10, 8)
   capsule(ctx, cx, cy - 46, cx + 55, cy - 20, 9)
   capsule(ctx, cx + 55, cy - 20, cx + 62, cy + 10, 8)
-  // lotus legs (crossed)
   capsule(ctx, cx, cy - 24, cx - 48, cy + 16, 11)
   capsule(ctx, cx - 48, cy + 16, cx + 14, cy + 40, 10)
   capsule(ctx, cx, cy - 24, cx + 48, cy + 16, 11)
@@ -461,7 +413,6 @@ function drawYoga(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
 }
 
 function drawStairs(ctx: CanvasRenderingContext2D, _w: number, h: number) {
-  // staircase (4 steps, all right-edges aligned)
   ctx.globalAlpha = 0.52
   for (let i = 0; i < 4; i++) {
     const sx = 10 + i * 36
@@ -470,7 +421,6 @@ function drawStairs(ctx: CanvasRenderingContext2D, _w: number, h: number) {
   }
   ctx.globalAlpha = 1
 
-  // person climbing (compact, ~125px tall)
   const fx = 40, fy = 74
   head(ctx, fx, fy + 13, 15)
   capsule(ctx, fx, fy + 28, fx - 3, fy + 72, 10)
@@ -484,7 +434,6 @@ function drawStairs(ctx: CanvasRenderingContext2D, _w: number, h: number) {
 
 function drawMeditation(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   const cx = 90, cy = 158
-  // aura rings
   for (let r = 84; r >= 48; r -= 18) {
     ctx.globalAlpha = 0.09
     ctx.beginPath()
@@ -492,16 +441,12 @@ function drawMeditation(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
     ctx.fill()
   }
   ctx.globalAlpha = 1
-  // head
   head(ctx, cx, cy - 90, 22)
-  // torso
   capsule(ctx, cx, cy - 68, cx, cy - 24, 13)
-  // arms relaxed down-out (palms on knees)
   capsule(ctx, cx, cy - 46, cx - 50, cy - 12, 9)
   capsule(ctx, cx - 50, cy - 12, cx - 58, cy + 18, 8)
   capsule(ctx, cx, cy - 46, cx + 50, cy - 12, 9)
   capsule(ctx, cx + 50, cy - 12, cx + 58, cy + 18, 8)
-  // lotus legs
   capsule(ctx, cx, cy - 24, cx - 48, cy + 18, 11)
   capsule(ctx, cx - 48, cy + 18, cx + 14, cy + 40, 10)
   capsule(ctx, cx, cy - 24, cx + 48, cy + 18, 11)
@@ -512,26 +457,22 @@ function drawBook(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   const cx = 90, cy = 144
   const bw = 72, bh = 96
 
-  // left page
   ctx.save()
   ctx.translate(cx - bw / 2, cy - bh / 2)
   ctx.rotate(-0.04)
   rrect(ctx, 0, 0, bw, bh, 6)
   ctx.restore()
 
-  // right page
   ctx.save()
   ctx.translate(cx, cy - bh / 2)
   ctx.rotate(0.04)
   rrect(ctx, 0, 0, bw, bh, 6)
   ctx.restore()
 
-  // spine strip (black)
   ctx.fillStyle = '#000'
   rrect(ctx, cx - 8, cy - bh / 2, 16, bh, 5)
   ctx.fillStyle = '#fff'
 
-  // text lines on pages (black = cutout effect)
   ctx.fillStyle = '#000'
   for (let i = 0; i < 5; i++) {
     const ly = cy - bh / 2 + 18 + i * 18
@@ -543,7 +484,6 @@ function drawBook(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
 
 function drawStudy(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   const cx = 90
-  // large filled lightning bolt (knowledge/focus)
   ctx.beginPath()
   ctx.moveTo(cx + 28, 50)
   ctx.lineTo(cx - 20, 152)
@@ -556,12 +496,10 @@ function drawStudy(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
 }
 
 function drawWriting(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
-  // paper
   ctx.globalAlpha = 0.2
   rrect(ctx, 14, 92, 148, 168, 8)
   ctx.globalAlpha = 1
 
-  // text lines (filled rectangles)
   for (let i = 0; i < 5; i++) {
     const lw = i === 3 ? 82 : 128
     ctx.globalAlpha = 0.62 - i * 0.09
@@ -569,15 +507,12 @@ function drawWriting(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   }
   ctx.globalAlpha = 1
 
-  // pencil (diagonal filled capsule, upper-right)
   capsule(ctx, 152, 44, 74, 178, 11)
 
-  // pencil tip (dark point)
   ctx.fillStyle = '#000'
   capsule(ctx, 74, 178, 64, 198, 5)
   ctx.fillStyle = '#fff'
 
-  // eraser cap (small circle at top)
   head(ctx, 152, 44, 13)
 }
 
@@ -585,45 +520,35 @@ function drawNoScreen(ctx: CanvasRenderingContext2D, _w: number, _h: number) {
   const cx = 90, cy = 118
   const mw = 144, mh = 92
 
-  // monitor frame (white)
   rrect(ctx, cx - mw / 2, cy - mh / 2, mw, mh, 8)
-  // screen (black cutout)
   ctx.fillStyle = '#000'
   rrect(ctx, cx - mw / 2 + 8, cy - mh / 2 + 8, mw - 16, mh - 16, 4)
   ctx.fillStyle = '#fff'
-  // stand
   rrect(ctx, cx - 22, cy + mh / 2, 44, 10, 4)
   rrect(ctx, cx - 6, cy + mh / 2 + 10, 12, 30, 3)
   rrect(ctx, cx - 30, cy + mh / 2 + 40, 60, 13, 5)
 
-  // X on screen (two diagonal capsules, white over black)
   capsule(ctx, cx - 40, cy - 28, cx + 40, cy + 28, 10)
   capsule(ctx, cx + 40, cy - 28, cx - 40, cy + 28, 10)
 }
 
 function drawSleep(ctx: CanvasRenderingContext2D, w: number, _h: number) {
-  // crescent moon
   head(ctx, 50, 76, 54)
   ctx.fillStyle = '#000'
   head(ctx, 75, 55, 46)
   ctx.fillStyle = '#fff'
 
-  // stars
   for (const [sx, sy, sr] of [[145, 22, 8], [162, 58, 5], [128, 78, 4]] as [number,number,number][]) {
     head(ctx, sx, sy, sr)
   }
 
-  // sleeping figure (horizontal)
   const fy = 198
   head(ctx, 26, fy - 18, 18)
   capsule(ctx, 26, fy, 148, fy + 8, 12)
-  // arm over body
   capsule(ctx, 52, fy - 4, 46, fy - 34, 8)
-  // feet/legs
   capsule(ctx, 148, fy + 8, 138, fy + 54, 10)
   capsule(ctx, 124, fy + 7, 114, fy + 52, 10)
 
-  // Zzz (stroke-based, small)
   ctx.strokeStyle = '#fff'
   ctx.lineCap = 'round'
   const drawZ = (zx: number, zy: number, s: number, alpha: number) => {
@@ -653,14 +578,10 @@ function drawDefault(ctx: CanvasRenderingContext2D, w: number, _h: number) {
   capsule(ctx, cx, 188, cx + 22, 258, 12)
 }
 
-/** Jolly / surprise quest: a bolt of lightning over a glowing aura, giving the
- *  random "wild card" quest its own visual identity instead of the generic
- *  silhouette fallback. */
 function drawJolly(ctx: CanvasRenderingContext2D, w: number, h: number) {
   const cx = w / 2
   const cy = h / 2
 
-  // Aura glow behind the bolt
   for (let r = 92; r >= 36; r -= 18) {
     ctx.globalAlpha = 0.08
     ctx.beginPath()
@@ -669,7 +590,6 @@ function drawJolly(ctx: CanvasRenderingContext2D, w: number, h: number) {
   }
   ctx.globalAlpha = 1
 
-  // Lightning bolt (filled polygon)
   ctx.beginPath()
   ctx.moveTo(cx + 18, cy - 96)
   ctx.lineTo(cx - 34, cy + 6)
@@ -681,7 +601,6 @@ function drawJolly(ctx: CanvasRenderingContext2D, w: number, h: number) {
   ctx.closePath()
   ctx.fill()
 
-  // Sparkle accents
   ctx.font = 'bold 28px monospace'
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'

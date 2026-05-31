@@ -96,6 +96,18 @@ export interface Translations {
   privacyPublic: string
   privacyAnon: string
   privacyPrivate: string
+  continue: string
+  backToQuests: string
+  viewProfile: string
+  exitApp: string
+  proveWorth: string
+  allQuestsDone: string
+  wellDone: string
+  newQuestsTomorrow: string
+  penalty: string
+  nameLabel: string
+  artifactsLabel: string
+  penaltyDodged: string
 }
 
 const it: Translations = {
@@ -130,7 +142,7 @@ const it: Translations = {
   expLost: 'EXP persi',
   noQuests: 'Nessuna quest disponibile',
   setupRequired: 'CONFIGURAZIONE',
-  setupInstructions: 'Apri /setup.html nel browser',
+  setupInstructions: 'Premi per riprovare',
   pressToContinue: '[PRESS] Continua',
   pressToStart: '[PRESS] Inizia',
   pressToComplete: '[PRESS] Completata',
@@ -179,6 +191,18 @@ const it: Translations = {
   privacyPublic: 'Pubblico: nome visibile',
   privacyAnon: 'Anonimo: nome nascosto',
   privacyPrivate: 'Privato: non in classifica',
+  continue: 'Continua',
+  backToQuests: 'Torna alle quest',
+  viewProfile: 'Vedi profilo',
+  exitApp: 'Esci',
+  proveWorth: 'Dimostra il tuo valore.',
+  allQuestsDone: 'Quest completate!',
+  wellDone: 'Ben fatto, Player.',
+  newQuestsTomorrow: 'Nuove quest domani.',
+  penalty: 'Penalità',
+  nameLabel: 'Nome',
+  artifactsLabel: 'Artefatti',
+  penaltyDodged: 'Penalità evitata!',
 }
 
 const en: Translations = {
@@ -213,7 +237,7 @@ const en: Translations = {
   expLost: 'EXP lost',
   noQuests: 'No quests available',
   setupRequired: 'SETUP',
-  setupInstructions: 'Open /setup.html in browser',
+  setupInstructions: 'Press to retry',
   pressToContinue: '[PRESS] Continue',
   pressToStart: '[PRESS] Start',
   pressToComplete: '[PRESS] Done',
@@ -262,6 +286,18 @@ const en: Translations = {
   privacyPublic: 'Public: real name shown',
   privacyAnon: 'Anonymous: name hidden',
   privacyPrivate: 'Private: not in ranking',
+  continue: 'Continue',
+  backToQuests: 'Back to Quests',
+  viewProfile: 'View Profile',
+  exitApp: 'Exit App',
+  proveWorth: 'Prove your worth today.',
+  allQuestsDone: 'All quests completed!',
+  wellDone: 'Well done, Player.',
+  newQuestsTomorrow: 'New quests tomorrow.',
+  penalty: 'Penalty',
+  nameLabel: 'Name',
+  artifactsLabel: 'Artifacts',
+  penaltyDodged: 'Penalty dodged!',
 }
 
 const fr: Translations = {
@@ -292,7 +328,7 @@ const fr: Translations = {
   warning: 'AVERTISSEMENT',
   questMissed: 'Vous avez raté une quête',
   setupRequired: 'CONFIGURATION',
-  setupInstructions: 'Ouvrir /setup.html',
+  setupInstructions: 'Appuyez pour réessayer',
   pressToContinue: '[PRESS] Continuer',
   pressToStart: '[PRESS] Démarrer',
   pressToComplete: '[PRESS] Fait',
@@ -328,7 +364,7 @@ const de: Translations = {
   rankUp: 'RANG AUFGESTIEGEN!',
   warning: 'WARNUNG',
   setupRequired: 'EINSTELLUNGEN',
-  setupInstructions: 'Öffne /setup.html im Browser',
+  setupInstructions: 'Drücken zum Wiederholen',
   pressToContinue: '[PRESS] Weiter',
   pressToStart: '[PRESS] Starten',
   pressToComplete: '[PRESS] Fertig',
@@ -362,7 +398,7 @@ const es: Translations = {
   rankUp: '¡RANGO AUMENTADO!',
   warning: 'ADVERTENCIA',
   setupRequired: 'CONFIGURACIÓN',
-  setupInstructions: 'Abre /setup.html en el teléfono',
+  setupInstructions: 'Pulsa para reintentar',
   pressToContinue: '[PRESS] Continuar',
   pressToStart: '[PRESS] Empezar',
   pressToComplete: '[PRESS] Hecho',
@@ -396,7 +432,7 @@ const ja: Translations = {
   rankUp: 'ランクアップ！',
   warning: '警告',
   setupRequired: '設定',
-  setupInstructions: '電話で /setup.html を開く',
+  setupInstructions: 'もう一度押してください',
   pressToContinue: '[PRESS] 続ける',
   pressToStart: '[PRESS] 開始',
   pressToComplete: '[PRESS] 完了',
@@ -430,7 +466,7 @@ const ko: Translations = {
   rankUp: '랭크 업!',
   warning: '경고',
   setupRequired: '설정',
-  setupInstructions: '휴대폰에서 /setup.html 열기',
+  setupInstructions: '다시 누르세요',
   pressToContinue: '[PRESS] 계속',
   pressToStart: '[PRESS] 시작',
   pressToComplete: '[PRESS] 완료',
@@ -464,7 +500,7 @@ const zh: Translations = {
   rankUp: '段位提升!',
   warning: '警告',
   setupRequired: '设置',
-  setupInstructions: '在手机上打开 /setup.html',
+  setupInstructions: '请再按一次',
   pressToContinue: '[PRESS] 继续',
   pressToStart: '[PRESS] 开始',
   pressToComplete: '[PRESS] 完成',
@@ -497,7 +533,7 @@ const pt: Translations = {
   rankUp: 'RANK AUMENTOU!',
   warning: 'AVISO',
   setupRequired: 'CONFIGURAÇÃO',
-  setupInstructions: 'Abra /setup.html no telefone',
+  setupInstructions: 'Prima para tentar novamente',
   pressToContinue: '[PRESS] Continuar',
   pressToStart: '[PRESS] Começar',
   pressToComplete: '[PRESS] Feito',
@@ -530,7 +566,7 @@ const ru: Translations = {
   rankUp: 'ПОВЫШЕНИЕ РАНГА!',
   warning: 'ВНИМАНИЕ',
   setupRequired: 'НАСТРОЙКА',
-  setupInstructions: 'Откройте /setup.html на телефоне',
+  setupInstructions: 'Нажмите для повтора',
   pressToContinue: '[PRESS] Продолжить',
   pressToStart: '[PRESS] Начать',
   pressToComplete: '[PRESS] Готово',

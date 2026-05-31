@@ -8,8 +8,7 @@ import {
   type EvenAppBridge,
 } from '@evenrealities/even_hub_sdk'
 
-import type { PlayerProfile, Rank, ClassType } from './game-engine'
-import { getClassAbilityName } from './game-engine'
+import type { PlayerProfile, Rank } from './game-engine'
 import { type ArtifactId, getArtifact } from './artifact-data'
 import type { DailyQuest } from './quest-data'
 import type { RankingEntry } from './supabase-client'
@@ -95,22 +94,13 @@ export class G2Display {
     }
   }
 
-  /** Aggiorna SOLO il container testo (ID 1 'main') senza ricostruire la
-   *  pagina. Funziona sia in full-width sia in image-mode: in image-mode il
-   *  rebuild a tutto schermo (_rebuildFullWidth) falliva in silenzio sul
-   *  dispositivo, mentre textContainerUpgrade sul container esistente è sempre
-   *  affidabile. Usato per la conferma di uscita, che deve apparire anche
-   *  quando la pagina è in image-mode (es. quest list, profilo). */
-  async updateTextOnly(content: string): Promise<void> {
-    if (!this.initialized) return
-    this.lastContent = content
-    try {
-      await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
-        containerID: 1, containerName: 'main',
-        content, contentOffset: 0, contentLength: content.length,
-      }))
-    } catch (e) {
-      console.error('[G2] updateTextOnly failed:', e)
+  /** Pre-renders all quest images (and the welcome card) in the background
+   *  so the first detail transition is instant rather than computed on-demand. */
+  prewarmQuests(quests: DailyQuest[], rank?: string): void {
+    if (rank) renderWelcomeImage(rank).catch(() => {})
+    renderWildQuestImage().catch(() => {})
+    for (const q of quests) {
+      renderQuestImages(q.templateId, this._questCardInfo(q)).catch(() => {})
     }
   }
 
@@ -226,7 +216,8 @@ export class G2Display {
 
   private _questCardInfo(q: DailyQuest): QuestCardInfo {
     const tr = t(this.lang)
-    const attrKey = 'attr' + q.attribute.charAt(0).toUpperCase() + q.attribute.slice(1)
+    // 'str' maps to the translation key 'attrFor'; all other attributes follow the 'attr<Name>' pattern
+    const attrKey = q.attribute === 'str' ? 'attrFor' : ('attr' + q.attribute.charAt(0).toUpperCase() + q.attribute.slice(1))
     const attr = (tr as any)[attrKey] ?? q.attribute.toUpperCase()
     return {
       type: q.type === 'jolly' ? 'JOLLY' : q.type.toUpperCase(),
@@ -286,7 +277,7 @@ export class G2Display {
     const className = cls ? (clsKey && (tr as any)[clsKey] ? (tr as any)[clsKey] : cls) : '-'
 
     const artCount = (player.artifacts ?? []).length
-    const artLabel = artCount > 0 ? `Artifacts(${artCount})` : 'Artifacts'
+    const artLabel = artCount > 0 ? `${tr.artifactsLabel}(${artCount})` : tr.artifactsLabel
 
     return [
       `${name} ${rankPos}`,
@@ -297,28 +288,10 @@ export class G2Display {
       `I:${a.int} E:${a.end} Q:${player.questsCompleted}`,
       `Cls:${truncate(className, 13)}`,
       SHORT_LINE,
-      `${c(0)} ${artLabel}`,
-      `${c(1)} Ranking`,
-      `${c(2)} Name`,
-      `${c(3)} Back`,
-    ].join('\n')
-  }
-
-  buildPauseScreen(): string {
-    return [
-      LINE,
-      '  G2 SYSTEM — IN PAUSA',
-      LINE,
-      '',
-      "  L'app e' sospesa.",
-      '  Stai usando il telefono.',
-      '',
-      '  Torna nell\'app Even Hub',
-      '  sugli occhiali per',
-      '  continuare.',
-      '',
-      LINE,
-      '  ( anello non attivo )',
+      `${c(0)} ${truncate(artLabel, 17)}`,
+      `${c(1)} ${truncate(tr.ranking, 17)}`,
+      `${c(2)} ${truncate(tr.nameLabel, 17)}`,
+      `${c(3)} ${truncate(tr.back, 17)}`,
     ].join('\n')
   }
 
@@ -395,35 +368,41 @@ export class G2Display {
   }
 
   buildWarningScreen(expLost: number, selectedIdx = 0): string {
+    const tr = t(this.lang)
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
+    // expLost === 0 → la penalità è stata evitata (es. abilità Assassino)
+    const penaltyLine = expLost > 0
+      ? ` ${tr.penalty}: -${expLost} EXP`
+      : ` ${tr.penaltyDodged}`
     return [
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      '      *** WARNING ***',
+      `      *** ${tr.warning} ***`,
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      ' You missed a quest.',
-      ` Penalty: -${expLost} EXP`,
+      ` ${tr.questMissed}.`,
+      penaltyLine,
       LINE,
-      ' Prove your worth today.',
+      ` ${tr.proveWorth}`,
       LINE,
-      `${c(0)} Continue to Quests`,
-      `${c(1)} Exit App`,
+      `${c(0)} ${tr.continue}`,
+      `${c(1)} ${tr.exitApp}`,
       LINE,
       '▲/▼=Nav  [PRESS]=Select',
     ].join('\n')
   }
 
   buildAllDoneScreen(selectedIdx = 0): string {
+    const tr = t(this.lang)
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
     return [
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       '       *** SYSTEM ***',
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      ' All quests completed!',
-      ' Well done, Player.',
-      ' New quests tomorrow.',
+      ` ${tr.allQuestsDone}`,
+      ` ${tr.wellDone}`,
+      ` ${tr.newQuestsTomorrow}`,
       LINE,
-      `${c(0)} View Profile`,
-      `${c(1)} Back to Quests`,
+      `${c(0)} ${tr.viewProfile}`,
+      `${c(1)} ${tr.backToQuests}`,
       LINE,
       '▲/▼=Nav  [PRESS]=Select',
     ].join('\n')
@@ -440,52 +419,53 @@ export class G2Display {
       truncate(`${jollyTag}${name.toUpperCase()}`, 18),
       SHORT_LINE,
       `▶ ${q.amount} ${q.unit}`,
-      q.completed ? '● COMPLETATA' : '○ IN ATTESA',
+      q.completed ? `● ${tr.completed}` : `○ ${tr.pending}`,
       SHORT_LINE,
       q.completed
-        ? `${c(0)} Indietro`
-        : `${c(0)} Completa`,
-      q.completed ? '' : `${c(1)} Indietro`,
+        ? `${c(0)} ${tr.back}`
+        : `${c(0)} ${tr.complete}`,
+      q.completed ? '' : `${c(1)} ${tr.back}`,
       SHORT_LINE,
       '▲/▼  [P]=Seleziona',
     ].filter(l => l !== '').join('\n')
   }
 
   buildLevelUp(player: PlayerProfile, oldLevel: number, selectedIdx = 0): string {
+    const tr = t(this.lang)
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
     return [
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      '    *** LEVEL UP! ***',
+      `    *** ${tr.levelUp} ***`,
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
       ` Lv.${oldLevel}  ──▶  Lv.${player.level}`,
-      ` Rank: ${player.rank}`,
-      ` Player: ${truncate(player.name, 18)}`,
+      ` ${tr.rank}: ${player.rank}`,
+      ` ${tr.player}: ${truncate(player.name, 18)}`,
       LINE,
-      `${c(0)} Continue`,
-      `${c(1)} Back to Quests`,
+      `${c(0)} ${tr.continue}`,
+      `${c(1)} ${tr.backToQuests}`,
       LINE,
       '▲/▼=Nav  [PRESS]=Select',
     ].join('\n')
   }
 
-  buildRankUp(player: PlayerProfile, oldRank: Rank, selectedIdx = 0): string {
-    const c = (i: number) => i === selectedIdx ? '▶' : ' '
+  buildRankUp(player: PlayerProfile, oldRank: Rank, _selectedIdx = 0): string {
+    const tr = t(this.lang)
     return [
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      '     *** RANK UP! ***',
+      `     *** ${tr.rankUp} ***`,
       '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      ` Rank ${oldRank}  ──▶  Rank ${player.rank}`,
-      ` Level: ${player.level}`,
-      ` Player: ${truncate(player.name, 18)}`,
+      ` ${tr.rank} ${oldRank}  ──▶  ${tr.rank} ${player.rank}`,
+      ` ${tr.level}: ${player.level}`,
+      ` ${tr.player}: ${truncate(player.name, 18)}`,
       LINE,
-      `${c(0)} Continue`,
-      `${c(1)} Back to Quests`,
+      `▶ ${tr.continue}`,
       LINE,
-      '▲/▼=Nav  [PRESS]=Select',
+      '[PRESS]=OK',
     ].join('\n')
   }
 
   buildRanking(entries: RankingEntry[], page: number, selectedIdx: number, debugError?: string | null): string {
+    const tr = t(this.lang)
     const itemsPerPage = 4
     const start = page * itemsPerPage
     const pageItems = entries.slice(start, start + itemsPerPage)
@@ -523,7 +503,7 @@ export class G2Display {
     }
 
     lines.push(LINE)
-    lines.push(`${c(entries.length === 0 ? 0 : backIdx)} Indietro`)
+    lines.push(`${c(entries.length === 0 ? 0 : backIdx)} ${tr.back}`)
     lines.push('▲/▼=Nav  [P]=Seleziona')
     return lines.join('\n')
   }
@@ -549,11 +529,12 @@ export class G2Display {
       }
     }
 
-    lines.push(LINE, '▶ Back', '▲/▼  [P]=Indietro')
+    lines.push(LINE, `▶ ${tr.back}`, '▲/▼  [P]=Seleziona')
     return lines.join('\n')
   }
 
   buildRankingDetail(entry: RankingEntry, pos: number): string {
+    const tr = t(this.lang)
     return [
       `== ${truncate(entry.name, 16)} ==`,
       `#${pos} · ${entry.rank}`,
@@ -562,8 +543,8 @@ export class G2Display {
       `EXP: ${entry.expTotal}`,
       `Quests: ${entry.questsCompleted}`,
       LINE,
-      `▶ Back`,
-      '[P]=Indietro',
+      `▶ ${tr.back}`,
+      `[P]=${tr.back}`,
     ].join('\n')
   }
 
@@ -601,18 +582,4 @@ export class G2Display {
     ].join('\n')
   }
 
-  buildExitConfirmScreen(selectedIdx: number): string {
-    const c = (i: number) => i === selectedIdx ? '▶' : ' '
-    return [
-      SHORT_LINE,
-      ' ESCI DA G2 SYSTEM?',
-      SHORT_LINE,
-      '',
-      `${c(0)} NO  Rimani`,
-      `${c(1)} SI  Esci`,
-      '',
-      SHORT_LINE,
-      ' ▲/▼  [P]=Conferma',
-    ].join('\n')
-  }
 }

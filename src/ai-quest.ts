@@ -22,7 +22,7 @@ function buildDailyQuest(data: AIQuestData, level: number, dateStr: string, idx:
     attribute: data.attribute,
     unit: data.unit ?? 'count',
     amount: data.amount ?? 1,
-    expReward: Math.round((100 + level * 15) * (data.amount / 10)),
+    expReward: Math.round((100 + level * 15) * ((data.amount ?? 1) / 10)),
     completed: false,
     date: dateStr,
     jollyName: data.name,

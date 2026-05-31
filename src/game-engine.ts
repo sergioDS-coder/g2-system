@@ -150,6 +150,30 @@ export interface ExpResult {
   expGained: number
 }
 
+/** Consumes expCurrent across level thresholds and re-derives rank + class.
+ *  Shared by addExp and awardBonusExp so every EXP gain handles level-ups
+ *  identically. */
+function processLevelUps(p: PlayerProfile): void {
+  while (p.expCurrent >= getExpToNextLevel(p.level) && p.level < 99) {
+    p.expCurrent -= getExpToNextLevel(p.level)
+    p.level += 1
+  }
+  p.rank = getRankFromLevel(p.level)
+  p.playerClass = determineClass(p.attributes, p.level)
+}
+
+/** Derives the canonical level + within-level EXP from a lifetime EXP total.
+ *  Inverse of processLevelUps — used to rebuild a consistent state after undo. */
+export function deriveLevelState(expTotal: number): { level: number; expCurrent: number } {
+  let level = 1
+  let remaining = Math.max(0, expTotal)
+  while (level < 99 && remaining >= getExpToNextLevel(level)) {
+    remaining -= getExpToNextLevel(level)
+    level += 1
+  }
+  return { level, expCurrent: remaining }
+}
+
 export function addExp(player: PlayerProfile, exp: number, attribute: Attribute, expMultiplier = 1): ExpResult {
   const oldLevel = player.level
   const oldRank = player.rank
@@ -186,16 +210,7 @@ export function addExp(player: PlayerProfile, exp: number, attribute: Attribute,
   newPlayer.expCurrent += finalExp
   newPlayer.attributes[attribute] += 1
 
-  // Check level up
-  while (newPlayer.expCurrent >= getExpToNextLevel(newPlayer.level) && newPlayer.level < 99) {
-    newPlayer.expCurrent -= getExpToNextLevel(newPlayer.level)
-    newPlayer.level += 1
-  }
-
-  newPlayer.rank = getRankFromLevel(newPlayer.level)
-
-  // Update class based on new attributes and level
-  newPlayer.playerClass = determineClass(newPlayer.attributes, newPlayer.level)
+  processLevelUps(newPlayer)
 
   return {
     player: newPlayer,
@@ -209,11 +224,39 @@ export function addExp(player: PlayerProfile, exp: number, attribute: Attribute,
   }
 }
 
+/** Awards a flat EXP bonus (no attribute/streak change) and processes any
+ *  resulting level/rank up — so class-ability bonuses can trigger a level-up
+ *  screen just like normal quest EXP. */
+export function awardBonusExp(player: PlayerProfile, bonus: number): ExpResult {
+  const oldLevel = player.level
+  const oldRank = player.rank
+  const newPlayer: PlayerProfile = JSON.parse(JSON.stringify(player))
+  newPlayer.expTotal += bonus
+  newPlayer.expCurrent += bonus
+  processLevelUps(newPlayer)
+  return {
+    player: newPlayer,
+    leveledUp: newPlayer.level > oldLevel,
+    rankedUp: newPlayer.rank !== oldRank,
+    oldLevel,
+    newLevel: newPlayer.level,
+    oldRank,
+    newRank: newPlayer.rank,
+    expGained: bonus,
+  }
+}
+
 export function subtractExp(player: PlayerProfile, exp: number, attribute: Attribute): PlayerProfile {
   const newPlayer: PlayerProfile = JSON.parse(JSON.stringify(player))
-  newPlayer.expCurrent = Math.max(0, newPlayer.expCurrent - exp)
   newPlayer.expTotal = Math.max(0, newPlayer.expTotal - exp)
   newPlayer.attributes[attribute] = Math.max(1, newPlayer.attributes[attribute] - 1)
+  // Re-derive level/rank/class from the reduced total so an undo fully reverses
+  // a completion that had triggered a level-up (no orphaned level or class).
+  const { level, expCurrent } = deriveLevelState(newPlayer.expTotal)
+  newPlayer.level = level
+  newPlayer.expCurrent = expCurrent
+  newPlayer.rank = getRankFromLevel(level)
+  newPlayer.playerClass = determineClass(newPlayer.attributes, level)
   return newPlayer
 }
 

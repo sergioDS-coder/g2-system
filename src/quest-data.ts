@@ -1,6 +1,6 @@
 // quest-data.ts - Database quest predefinite + generazione giornaliera
 
-import type { Attribute, Rank } from './game-engine'
+import type { Attribute } from './game-engine'
 
 export interface QuestTemplate {
   id: string

@@ -9,7 +9,7 @@ import {
   type PlayerProfile, type Rank, type AbilityState,
   addExp, subtractExp, applyPenalty, incrementQuestCount,
   createDefaultPlayer, getQuestsPerDay,
-  isWeeklySkipAvailable,
+  isWeeklySkipAvailable, awardBonusExp,
 } from './game-engine'
 
 import { rollArtifactReward, calcExpMultiplier, calcPenaltyReduction, type ArtifactId } from './artifact-data'
@@ -32,7 +32,7 @@ type Screen =
   | 'warning' | 'questList' | 'questDetail'
   | 'levelUp' | 'rankUp' | 'profile' | 'artifacts'
   | 'ranking' | 'rankingDetail' | 'error'
-  | 'artifactReward' | 'exitConfirm'
+  | 'artifactReward'
 
 let currentScreen: Screen = 'boot'
 let display: G2Display
@@ -58,12 +58,6 @@ let warningIdx = 0
 let selectedRankingEntry: RankingEntry | null = null
 let handlingInput = false
 let pendingPress  = false
-let isPaused           = false
-let pauseTimer: ReturnType<typeof setTimeout> | null = null
-let suppressPauseUntil = 0
-
-let exitConfirmIdx  = 0
-let preExitScreen: Screen = 'questList'
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp:  { oldRank: Rank }    | null = null
@@ -74,7 +68,7 @@ let pendingArtifact: ArtifactId | null = null
 // ─── Inserimento nome, lingua e privacy ───────────────────────────────────────
 
 const CHARSET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 _-'
-const LANGS: Lang[] = ['en', 'de', 'fr', 'es', 'it', 'zh', 'ja', 'ko']
+const LANGS: Lang[] = ['en', 'de', 'fr', 'es', 'it', 'pt', 'ru', 'zh', 'ja', 'ko']
 const PRIVACY_OPTIONS = ['public', 'anonymous', 'private']
 type InputStep = 'name' | 'lang'
 
@@ -137,7 +131,7 @@ async function setupMonitor() {
       '─────────────',
       ...(log.length ? log : ['(in attesa...)']),
     ]
-    await display.updateTextOnly(lines.join('\n'))
+    await display.update(lines.join('\n'))
   }
 
   // Pausa extra dopo initPage per essere certi che l'SDK accetti textContainerUpgrade
@@ -176,24 +170,6 @@ async function main() {
 
   await initialize()
   setupEventListener()
-
-  // visibilitychange / pagehide come fallback per quando FOREGROUND_EXIT_EVENT
-  // non arriva al JS (WebView sospeso prima che l'SDK lo consegni).
-  // Debounce 1500ms: operazioni transitorie (BLE, dim, check sistema) ripristinano
-  // la visibilità in meno di un secondo e non triggerano la pausa.
-  const schedulePause = () => {
-    if (pauseTimer) return
-    pauseTimer = setTimeout(() => { pauseTimer = null; showPause().catch(() => {}) }, 1500)
-  }
-  const cancelPause = () => {
-    if (pauseTimer) { clearTimeout(pauseTimer); pauseTimer = null }
-    restoreFromPause().catch(() => {})
-  }
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) schedulePause(); else cancelPause()
-  })
-  window.addEventListener('pagehide', schedulePause)
-  window.addEventListener('pageshow', cancelPause)
 }
 
 async function initialize() {
@@ -241,36 +217,33 @@ async function initialize() {
 
   if (player.lastDailyDate !== today) {
     const missed = quests.filter(q => !q.completed && q.date === player!.lastDailyDate)
+    let showWarning = false
+
     if (missed.length > 0 && player.lastDailyDate) {
       const rawLost = missed.reduce((s, q) => s + Math.floor(q.expReward * 0.5), 0)
 
       if (player.playerClass === 'assassino' && isWeeklySkipAvailable(player.abilityState.weeklySkipUsed)) {
         player.abilityState.weeklySkipUsed = today
         warningExpLost = 0
-        await savePlayer(player)
-        warningIdx = 0; currentScreen = 'warning'
-        await display.update(display.buildWarningScreen(0, warningIdx))
-        return
+      } else {
+        const artifactReduction = calcPenaltyReduction(player.artifacts)
+        const classReduction    = player.playerClass === 'carro_armato' ? 0.20 : 0
+        const totalReduction    = Math.min(0.90, artifactReduction + classReduction)
+        const actualLost        = Math.round(rawLost * (1 - totalReduction))
+
+        player = applyPenalty(player, actualLost)
+        warningExpLost = actualLost
+
+        if (player.playerClass === 'guaritore') {
+          player.abilityState.pendingRecovery += Math.round(actualLost * 0.10)
+        }
       }
-
-      const artifactReduction = calcPenaltyReduction(player.artifacts)
-      const classReduction    = player.playerClass === 'carro_armato' ? 0.20 : 0
-      const totalReduction    = Math.min(0.90, artifactReduction + classReduction)
-      const actualLost        = Math.round(rawLost * (1 - totalReduction))
-
-      player = applyPenalty(player, actualLost)
-      warningExpLost = actualLost
-
-      if (player.playerClass === 'guaritore') {
-        player.abilityState.pendingRecovery += Math.round(actualLost * 0.10)
-      }
-
-      await savePlayer(player)
-      warningIdx = 0; currentScreen = 'warning'
-      await display.update(display.buildWarningScreen(warningExpLost, warningIdx))
-      return
+      showWarning = true
     }
 
+    // Always generate new quests for the new day and update the date — even
+    // when showing the penalty warning, so the date is never left stale and
+    // the user always gets today's quests after dismissing the warning.
     const count    = getQuestsPerDay(player.level)
     const aiQuests = await generateDailyQuestsAI(player.level, player.language, count)
     quests = aiQuests ?? generateDailyQuests(player.level, count, today)
@@ -285,9 +258,17 @@ async function initialize() {
     player.lastDailyDate = today
     await savePlayer(player)
     await supabase.upsertPlayer(player)
-    msgIdx = 0; currentScreen = 'dailyMessage'
-    await display.showDailyMessage(player.rank, player.level, msgIdx)
+    display.prewarmQuests(quests, player.rank)
+
+    if (showWarning) {
+      warningIdx = 0; currentScreen = 'warning'
+      await display.update(display.buildWarningScreen(warningExpLost, warningIdx))
+    } else {
+      msgIdx = 0; currentScreen = 'dailyMessage'
+      await display.showDailyMessage(player.rank, player.level, msgIdx)
+    }
   } else {
+    display.prewarmQuests(quests, player.rank)
     const allDone = quests.length > 0 && quests.every(q => q.completed)
     if (allDone) {
       allDoneIdx = 0; currentScreen = 'allDone'
@@ -361,6 +342,9 @@ async function refreshCurrentScreen() {
   if (!player) return
   try {
     switch (currentScreen) {
+      case 'setup':         await display.update(display.buildSetupScreen()); break
+      case 'nameInput':     await display.update(display.buildNameInput(nameBuffer, currentChar(), selectedLang, inputStep)); break
+      case 'privacy':       await display.update(display.buildPrivacyScreen(privacyIdx)); break
       case 'questList':     await display.showQuestList(quests, questIdx); break
       case 'questDetail':   await display.showQuestDetail(quests[questIdx], detailIdx); break
       case 'profile':       await display.showProfile(player, myRankPos, profileIdx); break
@@ -373,28 +357,11 @@ async function refreshCurrentScreen() {
       case 'rankingDetail': if (selectedRankingEntry) await display.update(display.buildRankingDetail(selectedRankingEntry, rankingPage * 4 + rankingIdx + 1)); break
       case 'artifacts':     await display.update(display.buildArtifactList(player)); break
       case 'artifactReward': if (pendingArtifact) await display.showArtifactReward(pendingArtifact); break
-      case 'exitConfirm':   await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
       default: break
     }
   } catch (e) {
     console.error('[G2] refreshCurrentScreen failed:', e)
   }
-}
-
-// ─── Pausa / Ripristino ───────────────────────────────────────────────────────
-
-async function showPause() {
-  if (isPaused) return
-  isPaused = true
-  handlingInput = false; pendingPress = false
-  try { await display.update(display.buildPauseScreen()) } catch {}
-}
-
-async function restoreFromPause() {
-  if (!isPaused) return
-  isPaused = false
-  handlingInput = false; pendingPress = false
-  await refreshCurrentScreen()
 }
 
 async function goToArtifacts() {
@@ -421,7 +388,8 @@ async function completeQuest() {
   const result = addExp(player!, q.expReward, q.attribute, expMultiplier)
   player = incrementQuestCount(result.player)
 
-  // Ranger Adattamento: bonus 100 EXP al completamento di 3 attributi distinti in un giorno
+  // Ranger Adattamento: bonus 100 EXP al completamento di 3 attributi distinti in un giorno.
+  // Il bonus passa per awardBonusExp così può a sua volta scatenare un level/rank up.
   if (player.playerClass === 'ranger') {
     const today = new Date().toISOString().slice(0, 10)
     if (player.abilityState.adaptationDate !== today) {
@@ -431,8 +399,11 @@ async function completeQuest() {
     if (!player.abilityState.dailyAttrsCompleted.includes(q.attribute)) {
       player.abilityState.dailyAttrsCompleted.push(q.attribute)
       if (player.abilityState.dailyAttrsCompleted.length === 3) {
-        player.expTotal   += 100
-        player.expCurrent += 100
+        const bonus = awardBonusExp(player, 100)
+        player = bonus.player
+        // Mantieni oldLevel/oldRank della quest (salto completo); aggiorna solo i flag.
+        if (bonus.leveledUp) { result.leveledUp = true; result.newLevel = bonus.newLevel }
+        if (bonus.rankedUp)  { result.rankedUp  = true; result.newRank  = bonus.newRank }
       }
     }
   }
@@ -487,21 +458,6 @@ async function undoQuest() {
   await display.showQuestDetail(quests[questIdx], detailIdx)
 }
 
-// ─── Conferma uscita (doppio click) ──────────────────────────────────────────
-// updateTextOnly() sovrappone il dialogo solo nel pannello testo lasciando
-// l'immagine sinistra intatta. suppressPauseUntil blocca il FOREGROUND_EXIT
-// spurio che l'OS genera subito dopo il doppio click.
-
-async function showExitConfirm() {
-  if (currentScreen === 'exitConfirm') return
-  preExitScreen      = currentScreen
-  exitConfirmIdx     = 0
-  currentScreen      = 'exitConfirm'
-  suppressPauseUntil = Date.now() + 500
-  isPaused           = false  // doppio click = utente sugli occhiali → sblocca input
-  await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx))
-}
-
 // ─── Gestione eventi ──────────────────────────────────────────────────────────
 
 function setupEventListener() {
@@ -516,25 +472,27 @@ function setupEventListener() {
 
     // ─── Lifecycle ────────────────────────────────────────────────────────
     if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
-      await restoreFromPause(); return
+      // Reset any stuck input lock and refresh the screen after a phone detour.
+      handlingInput = false; pendingPress = false
+      await refreshCurrentScreen(); return
     }
     if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
-      if (Date.now() < suppressPauseUntil) return
-      await showPause(); return
+      // Release any in-flight lock so input is never stuck on return.
+      handlingInput = false; pendingPress = false; return
     }
 
-    // ─── Doppio click → conferma uscita (sysEvent.eventType === 3) ─────────
-    // Gestito PRIMA di handlingInput così non viene mai scartato.
+    // ─── Doppio click → dialogo di uscita di sistema ────────────────────────
     if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT || raw === 3 || raw === '3') {
-      await showExitConfirm(); return
+      await bridge.shutDownPageContainer(1); return
     }
 
-    if (isPaused) return
-
-    // Solo click e scroll sono input di gioco. Tutto il resto (IMU, sysEvent
-    // senza eventType, ecc.) viene ignorato: in passato l'undefined veniva
-    // trattato come click e causava selezioni/uscite spurie.
-    const isClick      = eventType === OsEventTypeList.CLICK_EVENT
+    // Click/scroll routing (text container active):
+    //   - Single press  → sysEvent,  eventType omitted (protobuf zero = CLICK_EVENT = 0)
+    //   - Scroll up/dn  → textEvent, eventType 1 / 2
+    // fromJson() cannot recover a zero-value field omitted by protobuf, so clicks
+    // must be detected by checking sysEvent presence + missing eventType directly.
+    const isClick = (event.sysEvent != null && event.sysEvent.eventType == null)
+                 || eventType === OsEventTypeList.CLICK_EVENT
     const isScrollUp   = eventType === OsEventTypeList.SCROLL_TOP_EVENT
     const isScrollDown = eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT
     if (!isClick && !isScrollUp && !isScrollDown) return
@@ -586,8 +544,8 @@ async function handlePress() {
     questDetail: handleQuestDetailPress,
     levelUp:     handleLevelUpPress,
     rankUp: async () => {
-      if (rankUpIdx === 1) await bridge.shutDownPageContainer(0)
-      else { pendingRankUp = null; await goToQuestList() }
+      pendingRankUp = null
+      await goToQuestList()
     },
     profile:   handleProfilePress,
     artifacts: async () => { await goToProfile() },
@@ -598,14 +556,6 @@ async function handlePress() {
     },
     error: async () => { await initialize() },
     artifactReward: handleArtifactRewardPress,
-    exitConfirm: async () => {
-      if (exitConfirmIdx === 1) {
-        await bridge.shutDownPageContainer(0)
-      } else {
-        currentScreen = preExitScreen
-        await refreshCurrentScreen()
-      }
-    },
   }
 
   const handler = handlers[currentScreen]
@@ -665,7 +615,9 @@ async function handleQuestDetailPress() {
 
 async function handleLevelUpPress() {
   if (levelIdx === 1) {
-    await bridge.shutDownPageContainer(0)
+    // "Back to Quests": skip any remaining celebration screens and go to quest list
+    pendingLevelUp = null; pendingRankUp = null
+    await goToQuestList()
   } else {
     pendingLevelUp = null
     if (pendingRankUp) {
@@ -754,9 +706,6 @@ async function handleSwipeUp() {
       await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
-    case 'exitConfirm':
-      exitConfirmIdx = Math.max(0, exitConfirmIdx - 1)
-      await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       if (rankingIdx > 0) {
         rankingIdx--
@@ -801,9 +750,6 @@ async function handleSwipeDown() {
       await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
-    case 'exitConfirm':
-      exitConfirmIdx = Math.min(1, exitConfirmIdx + 1)
-      await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const downItems  = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       const totalPages = Math.ceil(ranking.length / 4)
