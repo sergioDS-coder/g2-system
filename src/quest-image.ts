@@ -336,7 +336,16 @@ function capsule(ctx: CanvasRenderingContext2D, x1: number, y1: number, x2: numb
 
 function rrect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath()
-  ctx.roundRect(x, y, w, h, r)
+  if (ctx.roundRect) {
+    ctx.roundRect(x, y, w, h, r)
+  } else {
+    ctx.moveTo(x + r, y)
+    ctx.arcTo(x + w, y,     x + w, y + h, r)
+    ctx.arcTo(x + w, y + h, x,     y + h, r)
+    ctx.arcTo(x,     y + h, x,     y,     r)
+    ctx.arcTo(x,     y,     x + w, y,     r)
+    ctx.closePath()
+  }
   ctx.fill()
 }
 

@@ -163,8 +163,8 @@ export class G2Display {
     }))
   }
 
-  private async _rebuildWithImages(content: string): Promise<boolean> {
-    return this.bridge.rebuildPageContainer(new RebuildPageContainer({
+  private async _rebuildWithImages(content: string): Promise<void> {
+    await this.bridge.rebuildPageContainer(new RebuildPageContainer({
       containerTotalNum: 3,
       imageObject: [
         new ImageContainerProperty({ xPosition: 0, yPosition: 0, width: IMG_W, height: IMG_H, containerID: 2, containerName: 'img-top' }),
@@ -194,11 +194,13 @@ export class G2Display {
     if (!this.inImageMode) {
       this.inImageMode = true
       this.lastContent = content
-      const ok = await this._rebuildWithImages(content)
-      if (ok) {
+      try {
+        await this._rebuildWithImages(content)
         const [top, bot] = await renderImages()
         await this._sendImages(top, bot)
         this.lastImageTemplateId = imageKey
+      } catch (e) {
+        console.error('[G2] _renderImageScreen rebuild failed:', e)
       }
       return
     }
@@ -262,10 +264,10 @@ export class G2Display {
       '*** SYSTEM ***',
       SHORT_LINE,
       `RANK ${rank} · LV.${level}`,
-      `${tr.newDay}.`,
+      truncate(`${tr.newDay}.`, 19),
       SHORT_LINE,
-      `${c(0)} Accetta Quest`,
-      `${c(1)} Esci`,
+      `${c(0)} ${truncate(tr.acceptDaily, 17)}`,
+      `${c(1)} ${tr.exit}`,
       SHORT_LINE,
       '▲/▼  [P]=Seleziona',
     ].join('\n')
@@ -392,23 +394,6 @@ export class G2Display {
     ].join('\n')
   }
 
-  buildDailyMessage(selectedIdx = 0): string {
-    const tr = t(this.lang)
-    const c = (i: number) => i === selectedIdx ? '▶' : ' '
-    return [
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      '   *** SYSTEM MESSAGE ***',
-      '━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
-      ` ${tr.newDay}.`,
-      ` ${tr.questsAwait}.`,
-      LINE,
-      `${c(0)} Accept Quests`,
-      `${c(1)} Exit App`,
-      LINE,
-      '▲/▼=Nav  [PRESS]=Select',
-    ].join('\n')
-  }
-
   buildWarningScreen(expLost: number, selectedIdx = 0): string {
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
     return [
@@ -444,33 +429,6 @@ export class G2Display {
     ].join('\n')
   }
 
-  buildQuestList(quests: DailyQuest[], selectedIdx: number): string {
-    const tr = t(this.lang)
-    const done = quests.filter(q => q.completed).length
-    const lines: string[] = [
-      `== QUESTS (${done}/${quests.length}) ==`,
-      LINE,
-    ]
-
-    quests.forEach((q, i) => {
-      const cursor = i === selectedIdx ? '▶' : ' '
-      const status = q.completed ? '●' : '○'
-      const name = q.jollyName ?? ((tr as any)[q.nameKey] ?? q.nameKey)
-      const label = `${name} ${q.amount}${q.unit}`
-      lines.push(`${cursor}${status} ${truncate(label, 24)}`)
-    })
-
-    const profileCursor = selectedIdx === quests.length ? '▶' : ' '
-    lines.push(`${profileCursor}★ PROFILE`)
-
-    const exitCursor = selectedIdx === quests.length + 1 ? '▶' : ' '
-    lines.push(`${exitCursor}X EXIT`)
-
-    lines.push(LINE)
-    lines.push('▲/▼=Nav  [PRESS]=Select')
-    return lines.join('\n')
-  }
-
   /** Quest detail for narrow text container (right of image, ~19 chars/line) */
   buildQuestDetailNarrow(q: DailyQuest, selectedIdx = 0): string {
     const tr = t(this.lang)
@@ -490,34 +448,6 @@ export class G2Display {
       q.completed ? '' : `${c(1)} Indietro`,
       SHORT_LINE,
       '▲/▼  [P]=Seleziona',
-    ].filter(l => l !== '').join('\n')
-  }
-
-  /** Legacy full-width quest detail (used as fallback if image mode fails) */
-  buildQuestDetail(q: DailyQuest, selectedIdx = 0): string {
-    const tr = t(this.lang)
-    const name = q.jollyName ?? ((tr as any)[q.nameKey] ?? q.nameKey)
-    const attrKey = 'attr' + q.attribute.charAt(0).toUpperCase() + q.attribute.slice(1)
-    const attr = (tr as any)[attrKey] ?? q.attribute.toUpperCase()
-    const status = q.completed ? '● DONE' : '○ PENDING'
-    const jollyTag = q.type === 'jolly' ? '★ JOLLY ' : ''
-    const nameMax = jollyTag ? 18 : 26
-    const c = (i: number) => i === selectedIdx ? '▶' : ' '
-
-    return [
-      `== QUEST ==`,
-      LINE,
-      `${jollyTag}${truncate(name.toUpperCase(), nameMax)}`,
-      `Target: ${q.amount} ${q.unit}`,
-      `Attr: ${attr}   EXP: +${q.expReward}`,
-      `Status: ${status}`,
-      LINE,
-      q.completed
-        ? `${c(0)} Back to Quests`
-        : `${c(0)} Mark as Done`,
-      q.completed ? '' : `${c(1)} Back to Quests`,
-      LINE,
-      '▲/▼=Nav  [PRESS]=Select',
     ].filter(l => l !== '').join('\n')
   }
 
@@ -552,33 +482,6 @@ export class G2Display {
       `${c(1)} Back to Quests`,
       LINE,
       '▲/▼=Nav  [PRESS]=Select',
-    ].join('\n')
-  }
-
-  buildProfile(player: PlayerProfile, rankPosition: number | null, selectedIdx = 0): string {
-    const tr = t(this.lang)
-    const a = player.attributes
-    const rankPos = rankPosition ? `#${rankPosition}` : '-'
-    const c = (i: number) => i === selectedIdx ? '▶' : ' '
-
-    const cls = player.playerClass
-    const clsKey = cls ? ('class' + cls.charAt(0).toUpperCase() + cls.slice(1).replace('_', '')) as keyof typeof tr : null
-    const className = cls ? (clsKey && (tr as any)[clsKey] ? (tr as any)[clsKey] : cls) : '-'
-    const abilityName = cls ? getClassAbilityName(cls) : '-'
-
-    return [
-      `== ${truncate(player.name, 16)} ${rankPos} ==`,
-      `Lv.${player.level}  Rank: ${player.rank}`,
-      LINE,
-      `EXP: ${player.expCurrent} / ${player.expTotal} total`,
-      LINE,
-      `${tr.attrFor}:${a.str} ${tr.attrAgi}:${a.agi} ${tr.attrVit}:${a.vit}`,
-      `${tr.attrInt}:${a.int} ${tr.attrEnd}:${a.end}  Q:${player.questsCompleted}`,
-      `Cls: ${className}  Abi: ${abilityName}`,
-      LINE,
-      `${c(0)} Global Ranking`,
-      `${c(1)} Change Name`,
-      `${c(2)} Back`,
     ].join('\n')
   }
 
@@ -682,22 +585,6 @@ export class G2Display {
       truncate(displayName, 18),
       '',
       SHORT_LINE,
-      tr.pressToContinue,
-    ].join('\n')
-  }
-
-  buildArtifactReward(artifactId: ArtifactId): string {
-    const tr = t(this.lang)
-    const nameKey = ('artifact' + artifactId.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join('')) as keyof typeof tr
-    const displayName = (tr as any)[nameKey] ?? artifactId
-    return [
-      '╔══ ' + tr.jollyReward + ' ══╗',
-      '║',
-      `║  ${tr.artifact} ottenuto!`,
-      '║',
-      `║  ${truncate(displayName, 20)}`,
-      '║',
-      '╚══════════════════════════╝',
       tr.pressToContinue,
     ].join('\n')
   }

@@ -498,6 +498,7 @@ async function showExitConfirm() {
   exitConfirmIdx     = 0
   currentScreen      = 'exitConfirm'
   suppressPauseUntil = Date.now() + 500
+  isPaused           = false  // doppio click = utente sugli occhiali → sblocca input
   await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx))
 }
 
