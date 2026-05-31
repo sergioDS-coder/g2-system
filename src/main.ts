@@ -464,26 +464,24 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    // Guida Even Hub: tutti gli eventi input arrivano via event.textEvent
-    // quando il container di cattura è un TextContainer (isEventCapture:1).
-    // I lifecycle events (foreground enter/exit) possono arrivare via sysEvent.
+    // Su hardware reale gli scroll arrivano via textEvent, click/double-click
+    // via sysEvent. Usiamo il fallback textEvent ?? sysEvent come in v2.0.1.
     const textEvent = event.textEvent
     const sysEvent  = event.sysEvent
+    const activeEvent = textEvent ?? sysEvent
+    if (!activeEvent) return
 
-    // ─── Lifecycle (checked su entrambi i canali) ─────────────────────────
-    const lcType = sysEvent?.eventType ?? textEvent?.eventType
-    if (lcType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
+    const eventType = activeEvent.eventType
+
+    // ─── Lifecycle ────────────────────────────────────────────────────────
+    if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
       await restoreFromPause(); return
     }
-    if (lcType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
+    if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
       await showPause(); return
     }
 
-    // ─── Input: solo via textEvent (come da guida) ────────────────────────
-    if (!textEvent) return
-    const eventType = textEvent.eventType
-
-    // Doppio click → dialogo di uscita nativo (obbligatorio per review)
+    // ─── Doppio click → dialogo di uscita nativo Even Hub ─────────────────
     if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
       await handleDoublePress(); return
     }
