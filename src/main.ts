@@ -464,45 +464,40 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    const raw = event?.eventType
-      ?? event?.textEvent?.eventType
-      ?? event?.sysEvent?.eventType
-      ?? event?.listEvent?.eventType
-    const eventType = OsEventTypeList.fromJson(raw)
+    // Guida Even Hub: tutti gli eventi input arrivano via event.textEvent
+    // quando il container di cattura è un TextContainer (isEventCapture:1).
+    // I lifecycle events (foreground enter/exit) possono arrivare via sysEvent.
+    const textEvent = event.textEvent
+    const sysEvent  = event.sysEvent
 
-    // ─── Lifecycle ────────────────────────────────────────────────────────
-    if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
+    // ─── Lifecycle (checked su entrambi i canali) ─────────────────────────
+    const lcType = sysEvent?.eventType ?? textEvent?.eventType
+    if (lcType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
       await restoreFromPause(); return
     }
-    if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
+    if (lcType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
       await showPause(); return
     }
 
-    // ─── Doppio click ─────────────────────────────────────────────────────
-    // Regola Even Hub (obbligatoria per la review): sulla root page il doppio
-    // tap DEVE chiamare shutDownPageContainer(1) → dialogo di uscita nativo.
-    // Sulle altre schermate il doppio tap "torna indietro". Gestito PRIMA di
-    // handlingInput così non viene mai scartato dalla serializzazione input.
+    // ─── Input: solo via textEvent (come da guida) ────────────────────────
+    if (!textEvent) return
+    const eventType = textEvent.eventType
+
+    // Doppio click → dialogo di uscita nativo (obbligatorio per review)
     if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
-      await handleDoublePress()
-      return
+      await handleDoublePress(); return
     }
 
-    // Quando l'app è in pausa ogni altro input è ignorato.
     if (isPaused) return
-
-    // Filter out exit/IMU events; pass through click/scroll/undefined
-    if (eventType !== OsEventTypeList.CLICK_EVENT
-     && eventType !== OsEventTypeList.SCROLL_TOP_EVENT
-     && eventType !== OsEventTypeList.SCROLL_BOTTOM_EVENT
-     && eventType !== undefined) return
 
     const isClick = eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined
 
+    // Filtra eventi non gestiti (IMU, ecc.)
+    if (!isClick
+      && eventType !== OsEventTypeList.SCROLL_TOP_EVENT
+      && eventType !== OsEventTypeList.SCROLL_BOTTOM_EVENT) return
+
     // ─── Input serialization ──────────────────────────────────────────────
-    // If busy handling a previous event, queue the click so it fires as soon
-    // as the scroll BLE update completes — this is the typical "rotate to item,
-    // immediately press to confirm" gesture. Scrolls while busy are dropped.
     if (handlingInput) {
       if (isClick) pendingPress = true
       return
@@ -516,7 +511,6 @@ function setupEventListener() {
       } else if (eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT) {
         await handleSwipeDown()
       } else {
-        // CLICK_EVENT (0) or undefined
         pendingPress = false
         await handlePress()
       }
@@ -524,7 +518,6 @@ function setupEventListener() {
       clearTimeout(watchdog)
       handlingInput = false
 
-      // ─── Flush queued click (fired while scroll was processing) ──────────
       if (pendingPress) {
         pendingPress = false
         handlingInput = true
