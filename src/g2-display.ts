@@ -717,15 +717,15 @@ export class G2Display {
   buildExitConfirmScreen(selectedIdx: number): string {
     const c = (i: number) => i === selectedIdx ? '▶' : ' '
     return [
-      LINE,
-      '  ESCI DA G2 SYSTEM?',
-      LINE,
+      SHORT_LINE,
+      ' ESCI DA G2 SYSTEM?',
+      SHORT_LINE,
       '',
-      `${c(0)} NO  — Rimani`,
-      `${c(1)} SI  — Esci dall\'app`,
+      `${c(0)} NO  Rimani`,
+      `${c(1)} SI  Esci`,
       '',
-      LINE,
-      '  ▲/▼  [P]=Conferma',
+      SHORT_LINE,
+      ' ▲/▼  [P]=Conferma',
     ].join('\n')
   }
 }
