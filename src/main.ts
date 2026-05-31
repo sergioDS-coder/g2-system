@@ -123,6 +123,43 @@ function charsetLen(): number {
 
 // ─── Avvio ────────────────────────────────────────────────────────────────────
 
+// Metti a true per la diagnosi degli eventi anello/stanghette, false per il gioco.
+const DEBUG_MONITOR = true
+
+// Formatta un valore evento in modo compatto per la riga di monitor.
+function fmtEv(v: any): string {
+  if (v === undefined) return '-'
+  if (v === null) return 'null'
+  if (typeof v === 'string') return `"${v}"`
+  return String(v)
+}
+
+// Monitor diagnostico: mostra a schermo gli ultimi eventi ricevuti.
+async function setupMonitor() {
+  const log: string[] = []
+  const render = () => {
+    const lines = [
+      '== MONITOR EVENTI ==',
+      'click / 2click / su / giu',
+      '─────────────',
+      ...(log.length ? log : ['(in attesa...)']),
+    ]
+    display.update(lines.join('\n')).catch(() => {})
+  }
+  render()
+
+  bridge.onEvenHubEvent((event: any) => {
+    const top = event?.eventType
+    const tT  = event?.textEvent?.eventType
+    const sT  = event?.sysEvent?.eventType
+    const lT  = event?.listEvent?.eventType
+    const src = event?.sysEvent?.eventSource ?? event?.textEvent?.eventSource
+    log.unshift(`e:${fmtEv(top)} t:${fmtEv(tT)} s:${fmtEv(sT)} l:${fmtEv(lT)} src:${fmtEv(src)}`)
+    if (log.length > 7) log.pop()
+    render()
+  })
+}
+
 async function main() {
   bridge = await waitForEvenAppBridge()
   initBridgeStorage(bridge as any)
@@ -132,6 +169,16 @@ async function main() {
   const supaUrl = import.meta.env.VITE_SUPABASE_URL as string
   const supaKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
   supabase = new SupabaseClient(supaUrl, supaKey)
+
+  // ─── MODALITÀ DIAGNOSTICA ──────────────────────────────────────────────
+  // Con DEBUG_MONITOR=true l'app NON avvia il gioco: resta sulla schermata
+  // boot (1 container a tutto schermo, dove l'update funziona sempre) e mostra
+  // a video ogni evento che arriva dall'anello/stanghette. Serve a capire su
+  // QUALE canale e con quale valore arriva il doppio click su questo hardware.
+  if (DEBUG_MONITOR) {
+    setupMonitor()
+    return
+  }
 
   await initialize()
   setupEventListener()
