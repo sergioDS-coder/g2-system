@@ -61,9 +61,6 @@ let pendingPress  = false
 let isPaused      = false
 let pauseTimer: ReturnType<typeof setTimeout> | null = null
 
-let lastClickTime = 0
-const DOUBLE_CLICK_MS = 400
-
 let exitConfirmIdx  = 0
 let preExitScreen: Screen = 'questList'
 
@@ -118,8 +115,9 @@ function normalizePlayer(p: PlayerProfile): PlayerProfile {
 // ─── Monitor diagnostico ──────────────────────────────────────────────────────
 // Con DEBUG_MONITOR=true l'app NON avvia il gioco: mostra ogni evento ricevuto
 // dall'anello/stanghette così da identificare canale e valore del doppio click.
+// Diagnosi conclusa: il doppio click arriva come sysEvent.eventType === 3.
 
-const DEBUG_MONITOR = true
+const DEBUG_MONITOR = false
 
 function fmtEv(v: any): string {
   if (v === undefined) return '-'
@@ -504,12 +502,15 @@ async function showExitConfirm() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
+    // Routing confermato sull'hardware: click/scroll su textEvent (0/1/2),
+    // doppio click e lifecycle su sysEvent (3/4/5).
     const raw = event?.eventType
       ?? event?.textEvent?.eventType
       ?? event?.sysEvent?.eventType
       ?? event?.listEvent?.eventType
     const eventType = OsEventTypeList.fromJson(raw)
 
+    // ─── Lifecycle ────────────────────────────────────────────────────────
     if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
       await restoreFromPause(); return
     }
@@ -517,31 +518,21 @@ function setupEventListener() {
       await showPause(); return
     }
 
-    // Doppio click: confronto robusto su enum + valore grezzo 3 (su alcuni
-    // firmware fromJson non restituisce l'enum atteso).
+    // ─── Doppio click → conferma uscita (sysEvent.eventType === 3) ─────────
+    // Gestito PRIMA di handlingInput così non viene mai scartato.
     if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT || raw === 3 || raw === '3') {
-      lastClickTime = 0
       await showExitConfirm(); return
     }
 
     if (isPaused) return
 
-    if (eventType !== OsEventTypeList.CLICK_EVENT
-     && eventType !== OsEventTypeList.SCROLL_TOP_EVENT
-     && eventType !== OsEventTypeList.SCROLL_BOTTOM_EVENT
-     && eventType !== undefined) return
-
-    const isClick = eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined
-
-    // Fallback doppio click via software: due CLICK entro 400ms = doppio click.
-    if (isClick) {
-      const now = Date.now()
-      if (now - lastClickTime < DOUBLE_CLICK_MS) {
-        lastClickTime = 0
-        await showExitConfirm(); return
-      }
-      lastClickTime = now
-    }
+    // Solo click e scroll sono input di gioco. Tutto il resto (IMU, sysEvent
+    // senza eventType, ecc.) viene ignorato: in passato l'undefined veniva
+    // trattato come click e causava selezioni/uscite spurie.
+    const isClick      = eventType === OsEventTypeList.CLICK_EVENT
+    const isScrollUp   = eventType === OsEventTypeList.SCROLL_TOP_EVENT
+    const isScrollDown = eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT
+    if (!isClick && !isScrollUp && !isScrollDown) return
 
     if (handlingInput) {
       if (isClick) pendingPress = true
@@ -551,8 +542,8 @@ function setupEventListener() {
     handlingInput = true
     const watchdog = setTimeout(() => { handlingInput = false; pendingPress = false }, 8000)
     try {
-      if      (eventType === OsEventTypeList.SCROLL_TOP_EVENT)    await handleSwipeUp()
-      else if (eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT) await handleSwipeDown()
+      if      (isScrollUp)   await handleSwipeUp()
+      else if (isScrollDown) await handleSwipeDown()
       else { pendingPress = false; await handlePress() }
     } finally {
       clearTimeout(watchdog)
