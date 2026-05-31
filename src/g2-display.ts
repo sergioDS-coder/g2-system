@@ -95,21 +95,6 @@ export class G2Display {
     }
   }
 
-  /** Aggiorna solo il container testo senza uscire dall'image-mode.
-   *  In image-mode: l'immagine a sinistra resta intatta, solo il testo
-   *  a destra cambia → effetto "finestra sovrapposta ridotta". */
-  async updateTextOnly(content: string): Promise<void> {
-    if (!this.initialized) return
-    this.lastContent = content
-    try {
-      await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
-        containerID: 1, containerName: 'main',
-        content, contentOffset: 0, contentLength: content.length,
-      }))
-    } catch (e) {
-      console.error('[G2] updateTextOnly failed:', e)
-    }
-  }
 
   /** Quest list with Wild Quest card on the left + narrow list on the right */
   async showQuestList(quests: DailyQuest[], selectedIdx: number): Promise<void> {
@@ -711,18 +696,4 @@ export class G2Display {
     ].join('\n')
   }
 
-  buildExitConfirmScreen(selectedIdx: number): string {
-    const c = (i: number) => i === selectedIdx ? '▶' : ' '
-    return [
-      SHORT_LINE,
-      ' ESCI DA G2 SYSTEM?',
-      SHORT_LINE,
-      '',
-      `${c(0)} NO  — Rimani`,
-      `${c(1)} SI  — Esci`,
-      '',
-      SHORT_LINE,
-      ' ▲/▼  [P]=Conferma',
-    ].join('\n')
-  }
 }

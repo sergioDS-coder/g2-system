@@ -50,7 +50,7 @@ type Screen =
   | 'warning' | 'questList' | 'questDetail'
   | 'levelUp' | 'rankUp' | 'profile' | 'artifacts'
   | 'ranking' | 'rankingDetail' | 'error'
-  | 'artifactReward' | 'exitConfirm'
+  | 'artifactReward'
 
 let currentScreen: Screen = 'boot'
 let display: G2Display
@@ -84,9 +84,6 @@ let pendingRankUp: { oldRank: Rank } | null = null
 let warningExpLost = 0
 
 let pendingArtifact: ArtifactId | null = null
-
-let exitConfirmIdx = 0
-let preExitScreen: Screen = 'questList'
 
 // ─── Inserimento nome, lingua e privacy ───────────────────────────────────────
 
@@ -346,7 +343,6 @@ async function refreshCurrentScreen() {
       case 'rankingDetail': if (selectedRankingEntry) await display.update(display.buildRankingDetail(selectedRankingEntry, rankingPage * 4 + rankingIdx + 1)); break
       case 'artifacts':   await display.update(display.buildArtifactList(player)); break
       case 'artifactReward': if (pendingArtifact) await display.showArtifactReward(pendingArtifact); break
-      case 'exitConfirm':   await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
       default: break
     }
   } catch (e) {
@@ -565,10 +561,6 @@ async function handlePress() {
     },
     error: async () => { await initialize() },
     artifactReward: handleArtifactRewardPress,
-    exitConfirm: async () => {
-      if (exitConfirmIdx === 1) { await bridge.shutDownPageContainer(0) }
-      else { currentScreen = preExitScreen; await refreshCurrentScreen() }
-    },
   }
 
   const handler = handlers[currentScreen]
@@ -722,9 +714,6 @@ async function handleSwipeUp() {
       rankUpIdx = Math.max(0, rankUpIdx - 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
-    case 'exitConfirm':
-      exitConfirmIdx = Math.max(0, exitConfirmIdx - 1)
-      await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const upItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       if (rankingIdx > 0) {
@@ -768,9 +757,6 @@ async function handleSwipeDown() {
       rankUpIdx = Math.min(1, rankUpIdx + 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
-    case 'exitConfirm':
-      exitConfirmIdx = Math.min(1, exitConfirmIdx + 1)
-      await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const downItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       const maxIdx = downItems.length
@@ -788,14 +774,13 @@ async function handleSwipeDown() {
 }
 
 // ─── Doppio click ─────────────────────────────────────────────────────────────
-// Mostra la conferma uscita SOLO nel pannello testo (updateTextOnly), così
-// l'immagine a sinistra resta intatta → finestra ridotta sovrapposta allo
-// schermo corrente. Default: cursore su NO per evitare uscite accidentali.
+// shutDownPageContainer(1) = foreground interaction layer nativo Even Hub:
+// finestra sovrapposta ridotta che chiede all'utente se uscire o restare.
+// È l'unica API ufficiale per questo comportamento (richiesta dalla review).
+// Nel simulatore non funziona (warning "no active event container") ma
+// sul dispositivo reale appare correttamente come overlay nativo.
 async function handleDoublePress() {
-  preExitScreen = currentScreen === 'exitConfirm' ? preExitScreen : currentScreen
-  exitConfirmIdx = 0
-  currentScreen = 'exitConfirm'
-  await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx))
+  await bridge.shutDownPageContainer(1)
 }
 
 main().catch(async (err) => {
