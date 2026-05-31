@@ -50,7 +50,7 @@ type Screen =
   | 'warning' | 'questList' | 'questDetail'
   | 'levelUp' | 'rankUp' | 'profile' | 'artifacts'
   | 'ranking' | 'rankingDetail' | 'error'
-  | 'artifactReward'
+  | 'artifactReward' | 'exitConfirm'
 
 let currentScreen: Screen = 'boot'
 let display: G2Display
@@ -80,6 +80,9 @@ let isPaused = false       // true while the glasses are in background (phone in
 let suppressPauseUntil = 0 // timestamp: ignora pause/lifecycle fino a questo momento
 let lastClickTime = 0      // timestamp ultimo click, per rilevare il doppio click via software
 const DOUBLE_CLICK_MS = 400 // finestra entro cui due click contano come doppio click
+
+let exitConfirmIdx = 0          // 0 = NO (default sicuro), 1 = SI
+let preExitScreen: Screen = 'questList'  // schermata da ripristinare se annulla
 
 let pendingLevelUp: { oldLevel: number } | null = null
 let pendingRankUp: { oldRank: Rank } | null = null
@@ -328,6 +331,7 @@ async function refreshCurrentScreen() {
       case 'rankingDetail': if (selectedRankingEntry) await display.update(display.buildRankingDetail(selectedRankingEntry, rankingPage * 4 + rankingIdx + 1)); break
       case 'artifacts':   await display.update(display.buildArtifactList(player)); break
       case 'artifactReward': if (pendingArtifact) await display.showArtifactReward(pendingArtifact); break
+      case 'exitConfirm':   await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
       default: break
     }
   } catch (e) {
@@ -550,6 +554,14 @@ async function handlePress() {
     },
     error: async () => { await initialize() },
     artifactReward: handleArtifactRewardPress,
+    exitConfirm: async () => {
+      if (exitConfirmIdx === 1) {
+        await bridge.shutDownPageContainer(0)   // uscita immediata (funziona)
+      } else {
+        currentScreen = preExitScreen
+        await refreshCurrentScreen()
+      }
+    },
   }
 
   const handler = handlers[currentScreen]
@@ -703,6 +715,9 @@ async function handleSwipeUp() {
       rankUpIdx = Math.max(0, rankUpIdx - 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
+    case 'exitConfirm':
+      exitConfirmIdx = Math.max(0, exitConfirmIdx - 1)
+      await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const upItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       if (rankingIdx > 0) {
@@ -746,6 +761,9 @@ async function handleSwipeDown() {
       rankUpIdx = Math.min(1, rankUpIdx + 1); await display.update(display.buildRankUp(player!, pendingRankUp?.oldRank ?? player!.rank as Rank, rankUpIdx)); break
     case 'profile':
       if (profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
+    case 'exitConfirm':
+      exitConfirmIdx = Math.min(1, exitConfirmIdx + 1)
+      await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const downItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       const maxIdx = downItems.length
@@ -763,17 +781,17 @@ async function handleSwipeDown() {
 }
 
 // ─── Doppio click ─────────────────────────────────────────────────────────────
-// shutDownPageContainer(1) = foreground interaction layer nativo Even Hub:
-// finestra sovrapposta ridotta che chiede all'utente se uscire o restare.
-// È l'unica API ufficiale per questo comportamento (richiesta dalla review).
-// Nel simulatore non funziona (warning "no active event container") ma
-// sul dispositivo reale appare correttamente come overlay nativo.
+// shutDownPageContainer(1) (dialogo nativo) NON funziona via codice sul
+// dispositivo reale: non mostra nulla. L'unica via affidabile è una schermata
+// di conferma custom mostrata con updateTextOnly (funziona anche in image-mode),
+// e poi shutDownPageContainer(0) per l'uscita effettiva (confermato funzionante
+// dal pulsante "X Exit").
 async function handleDoublePress() {
-  // Sopprimi la schermata di pausa per 6s: il dialogo nativo di uscita
-  // nasconde brevemente il WebView, scattando visibilitychange/FOREGROUND_EXIT
-  // che altrimenti mostrerebbero la schermata di pausa sopra il dialogo.
-  suppressPauseUntil = Date.now() + 6000
-  await bridge.shutDownPageContainer(1)
+  if (currentScreen === 'exitConfirm') return   // già nella conferma
+  preExitScreen = currentScreen
+  exitConfirmIdx = 0                             // default su NO (sicuro)
+  currentScreen = 'exitConfirm'
+  await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx))
 }
 
 main().catch(async (err) => {

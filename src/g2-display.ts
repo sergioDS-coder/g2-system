@@ -95,6 +95,23 @@ export class G2Display {
     }
   }
 
+  /** Aggiorna SOLO il container testo (ID 1 'main') senza ricostruire la
+   *  pagina. Funziona sia in full-width sia in image-mode: in image-mode il
+   *  rebuild a tutto schermo falliva in silenzio sul dispositivo, mentre
+   *  textContainerUpgrade sul container esistente è sempre affidabile. */
+  async updateTextOnly(content: string): Promise<void> {
+    if (!this.initialized) return
+    this.lastContent = content
+    try {
+      await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
+        containerID: 1, containerName: 'main',
+        content, contentOffset: 0, contentLength: content.length,
+      }))
+    } catch (e) {
+      console.error('[G2] updateTextOnly failed:', e)
+    }
+  }
+
 
   /** Quest list with Wild Quest card on the left + narrow list on the right */
   async showQuestList(quests: DailyQuest[], selectedIdx: number): Promise<void> {
@@ -693,6 +710,23 @@ export class G2Display {
       truncate(message, 28),
       LINE,
       '[PRESS] Retry',
+    ].join('\n')
+  }
+
+  /** Conferma uscita. Mostrata via updateTextOnly così appare anche quando
+   *  la pagina è in image-mode (container testo stretto sulla destra). */
+  buildExitConfirmScreen(selectedIdx: number): string {
+    const c = (i: number) => i === selectedIdx ? '▶' : ' '
+    return [
+      SHORT_LINE,
+      ' ESCI DA G2 SYSTEM?',
+      SHORT_LINE,
+      '',
+      `${c(0)} NO  Rimani`,
+      `${c(1)} SI  Esci`,
+      '',
+      SHORT_LINE,
+      ' ▲/▼  [P]=Conferma',
     ].join('\n')
   }
 
