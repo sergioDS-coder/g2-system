@@ -95,6 +95,25 @@ export class G2Display {
     }
   }
 
+  /** Aggiorna SOLO il container testo (ID 1 'main') senza ricostruire la
+   *  pagina. Funziona sia in full-width sia in image-mode: in image-mode il
+   *  rebuild a tutto schermo (_rebuildFullWidth) falliva in silenzio sul
+   *  dispositivo, mentre textContainerUpgrade sul container esistente è sempre
+   *  affidabile. Usato per la conferma di uscita, che deve apparire anche
+   *  quando la pagina è in image-mode (es. quest list, profilo). */
+  async updateTextOnly(content: string): Promise<void> {
+    if (!this.initialized) return
+    this.lastContent = content
+    try {
+      await this.bridge.textContainerUpgrade(new TextContainerUpgrade({
+        containerID: 1, containerName: 'main',
+        content, contentOffset: 0, contentLength: content.length,
+      }))
+    } catch (e) {
+      console.error('[G2] updateTextOnly failed:', e)
+    }
+  }
+
   /** Quest list with Wild Quest card on the left + narrow list on the right */
   async showQuestList(quests: DailyQuest[], selectedIdx: number): Promise<void> {
     if (!this.initialized) return

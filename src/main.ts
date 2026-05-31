@@ -78,6 +78,8 @@ let handlingInput = false
 let pendingPress = false   // click queued while a scroll was being processed
 let isPaused = false       // true while the glasses are in background (phone in use)
 let pauseTimer: ReturnType<typeof setTimeout> | null = null  // debounce for browser visibility events
+let lastClickTime = 0       // timestamp ultimo click, per il doppio click via software
+const DOUBLE_CLICK_MS = 400 // finestra entro cui due click contano come doppio click
 
 let exitConfirmIdx = 0           // 0 = NO (default sicuro), 1 = SÌ
 let preExitScreen: Screen = 'questList'
@@ -346,7 +348,7 @@ async function refreshCurrentScreen() {
       case 'rankingDetail': if (selectedRankingEntry) await display.update(display.buildRankingDetail(selectedRankingEntry, rankingPage * 4 + rankingIdx + 1)); break
       case 'artifacts':   await display.update(display.buildArtifactList(player)); break
       case 'artifactReward': if (pendingArtifact) await display.showArtifactReward(pendingArtifact); break
-      case 'exitConfirm':    await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
+      case 'exitConfirm':    await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
       default: break
     }
   } catch (e) {
@@ -464,6 +466,17 @@ async function undoQuest() {
   await display.showQuestDetail(quests[questIdx], detailIdx)
 }
 
+// ─── Conferma uscita (doppio click) ────────────────────────────────────────────
+// Mostrata con updateTextOnly così appare anche in image-mode (quest list,
+// profilo, ecc.), dove display.update fallirebbe nel rebuild a tutto schermo.
+async function showExitConfirm() {
+  if (currentScreen === 'exitConfirm') return   // già nella conferma
+  preExitScreen = currentScreen
+  exitConfirmIdx = 0                             // default su NO (sicuro)
+  currentScreen = 'exitConfirm'
+  await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx))
+}
+
 // ─── Gestione eventi ──────────────────────────────────────────────────────────
 
 function setupEventListener() {
@@ -482,15 +495,16 @@ function setupEventListener() {
       await showPause(); return
     }
 
-    // ─── Doppio click = schermata conferma uscita ─────────────────────────
-    // shutDownPageContainer(1) non è supportato dal simulatore Even Hub.
-    // Usiamo la nostra schermata di conferma custom, che funziona ovunque.
+    // ─── Doppio click (firmware) = schermata conferma uscita ──────────────
+    // Confronto robusto: enum normalizzato OPPURE valore grezzo 3 (su alcuni
+    // firmware fromJson non restituisce l'enum atteso). La conferma è mostrata
+    // con updateTextOnly: appare anche quando la pagina è in image-mode
+    // (quest list/profilo), dove display.update tenta un rebuild a tutto
+    // schermo che fallisce in silenzio sul dispositivo.
     // Gestito PRIMA di handlingInput così non viene mai scartato.
-    if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
-      preExitScreen = currentScreen
-      exitConfirmIdx = 0
-      currentScreen = 'exitConfirm'
-      await display.update(display.buildExitConfirmScreen(exitConfirmIdx))
+    if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT || raw === 3 || raw === '3') {
+      lastClickTime = 0
+      await showExitConfirm()
       return
     }
 
@@ -504,6 +518,19 @@ function setupEventListener() {
      && eventType !== undefined) return
 
     const isClick = eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined
+
+    // ─── Doppio click (software) ──────────────────────────────────────────
+    // Fallback: se il firmware non invia DOUBLE_CLICK_EVENT ma due CLICK
+    // ravvicinati (≤400ms), li interpretiamo come doppio click → conferma uscita.
+    if (isClick) {
+      const now = Date.now()
+      if (now - lastClickTime < DOUBLE_CLICK_MS) {
+        lastClickTime = 0
+        await showExitConfirm()
+        return
+      }
+      lastClickTime = now
+    }
 
     // ─── Input serialization ──────────────────────────────────────────────
     // If busy handling a previous event, queue the click so it fires as soon
@@ -730,7 +757,7 @@ async function handleSwipeUp() {
       if (profileIdx > 0) { profileIdx--; await display.showProfile(player!, myRankPos, profileIdx) } break
     case 'exitConfirm':
       exitConfirmIdx = Math.max(0, exitConfirmIdx - 1)
-      await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
+      await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const upItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       if (rankingIdx > 0) {
@@ -776,7 +803,7 @@ async function handleSwipeDown() {
       if (profileIdx < 3) { profileIdx++; await display.showProfile(player!, myRankPos, profileIdx) } break
     case 'exitConfirm':
       exitConfirmIdx = Math.min(1, exitConfirmIdx + 1)
-      await display.update(display.buildExitConfirmScreen(exitConfirmIdx)); break
+      await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx)); break
     case 'ranking': {
       const downItems = ranking.slice(rankingPage * 4, rankingPage * 4 + 4)
       const maxIdx = downItems.length
