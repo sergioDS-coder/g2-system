@@ -58,8 +58,9 @@ let warningIdx = 0
 let selectedRankingEntry: RankingEntry | null = null
 let handlingInput = false
 let pendingPress  = false
-let isPaused      = false
+let isPaused           = false
 let pauseTimer: ReturnType<typeof setTimeout> | null = null
+let suppressPauseUntil = 0
 
 let exitConfirmIdx  = 0
 let preExitScreen: Screen = 'questList'
@@ -487,16 +488,17 @@ async function undoQuest() {
 }
 
 // ─── Conferma uscita (doppio click) ──────────────────────────────────────────
-// display.update() fa il rebuild a schermo intero uscendo dall'image-mode,
-// esattamente come showPause() — confermato visibile sull'hardware.
-// updateTextOnly aggiornava solo la colonnina destra in image-mode (invisibile).
+// updateTextOnly() sovrappone il dialogo solo nel pannello testo lasciando
+// l'immagine sinistra intatta. suppressPauseUntil blocca il FOREGROUND_EXIT
+// spurio che l'OS genera subito dopo il doppio click.
 
 async function showExitConfirm() {
   if (currentScreen === 'exitConfirm') return
-  preExitScreen  = currentScreen
-  exitConfirmIdx = 0
-  currentScreen  = 'exitConfirm'
-  await display.update(display.buildExitConfirmScreen(exitConfirmIdx))
+  preExitScreen      = currentScreen
+  exitConfirmIdx     = 0
+  currentScreen      = 'exitConfirm'
+  suppressPauseUntil = Date.now() + 500
+  await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx))
 }
 
 // ─── Gestione eventi ──────────────────────────────────────────────────────────
@@ -516,6 +518,7 @@ function setupEventListener() {
       await restoreFromPause(); return
     }
     if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT) {
+      if (Date.now() < suppressPauseUntil) return
       await showPause(); return
     }
 
