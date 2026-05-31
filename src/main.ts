@@ -487,15 +487,16 @@ async function undoQuest() {
 }
 
 // ─── Conferma uscita (doppio click) ──────────────────────────────────────────
-// updateTextOnly è obbligatorio: display.update in image-mode (quest list, profilo)
-// tenta _rebuildFullWidth che fallisce in silenzio sull'hardware.
+// display.update() fa il rebuild a schermo intero uscendo dall'image-mode,
+// esattamente come showPause() — confermato visibile sull'hardware.
+// updateTextOnly aggiornava solo la colonnina destra in image-mode (invisibile).
 
 async function showExitConfirm() {
   if (currentScreen === 'exitConfirm') return
   preExitScreen  = currentScreen
   exitConfirmIdx = 0
   currentScreen  = 'exitConfirm'
-  await display.updateTextOnly(display.buildExitConfirmScreen(exitConfirmIdx))
+  await display.update(display.buildExitConfirmScreen(exitConfirmIdx))
 }
 
 // ─── Gestione eventi ──────────────────────────────────────────────────────────
