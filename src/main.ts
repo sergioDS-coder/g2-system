@@ -464,13 +464,11 @@ async function undoQuest() {
 
 function setupEventListener() {
   bridge.onEvenHubEvent(async (event: any) => {
-    // Legge eventType da tutti i possibili canali SDK in ordine di priorità.
-    // Su hardware reale il canale varia: event.eventType (top-level),
-    // event.textEvent.eventType (scroll), event.sysEvent.eventType (tap).
-    const eventType = event?.eventType
+    const raw = event?.eventType
       ?? event?.textEvent?.eventType
       ?? event?.sysEvent?.eventType
       ?? event?.listEvent?.eventType
+    const eventType = OsEventTypeList.fromJson(raw)
 
     // ─── Lifecycle ────────────────────────────────────────────────────────
     if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
@@ -480,19 +478,19 @@ function setupEventListener() {
       await showPause(); return
     }
 
-    // ─── Doppio click → dialogo di uscita nativo Even Hub ─────────────────
+    // ─── Doppio click ─────────────────────────────────────────────────────
     if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
       await handleDoublePress(); return
     }
 
     if (isPaused) return
 
-    const isClick = eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined
+    if (eventType !== OsEventTypeList.CLICK_EVENT
+     && eventType !== OsEventTypeList.SCROLL_TOP_EVENT
+     && eventType !== OsEventTypeList.SCROLL_BOTTOM_EVENT
+     && eventType !== undefined) return
 
-    // Filtra eventi non gestiti (IMU, ecc.)
-    if (!isClick
-      && eventType !== OsEventTypeList.SCROLL_TOP_EVENT
-      && eventType !== OsEventTypeList.SCROLL_BOTTOM_EVENT) return
+    const isClick = eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined
 
     // ─── Input serialization ──────────────────────────────────────────────
     if (handlingInput) {
