@@ -1,0 +1,18 @@
+{
+  "name": "g2-field-notes",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "server": "node local-server/server.js"
+  },
+  "dependencies": {
+    "@evenrealities/even_hub_sdk": "0.0.10"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0"
+  }
+}

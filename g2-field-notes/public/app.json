@@ -1,0 +1,28 @@
+{
+  "package_id": "com.sergiods.fieldnotes",
+  "name": "G2 Field Notes",
+  "edition": "202606",
+  "version": "1.0.0",
+  "min_app_version": "1.0.0",
+  "min_sdk_version": "0.0.10",
+  "entrypoint": "index.html",
+  "supported_languages": [
+    "it",
+    "en"
+  ],
+  "description": "Detta note rapide dal campo durante sopralluoghi e cantieri. La nota vocale viene trascritta, strutturata da Gemini e appesa alla Daily Note Obsidian di oggi tramite un server locale.",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Richiesto per strutturare la nota con Gemini e salvarla nella Daily Note locale",
+      "whitelist": [
+        "https://even-gemini-agent-4nt9npg3m-sergiods-coders-projects.vercel.app",
+        "http://localhost:5199"
+      ]
+    },
+    {
+      "name": "microphone",
+      "desc": "Richiesto per dettare la nota vocale dal campo"
+    }
+  ]
+}
